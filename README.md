@@ -1,0 +1,111 @@
+# ⚡ Quake Alacritty Terminal
+
+A sleek, macOS/i3-style drop-down ("visor") terminal setup for **Windows 11** built with **Alacritty** and **AutoHotkey v2**.
+
+Features mouse-aware multi-monitor detection, dynamic 2×2 quad grid tiling, acrylic background blur, and pixel-perfect DPI-aware click-through cyan seam dividers.
+
+---
+
+## 📸 Preview
+
+![Quake Alacritty Demo](assets/preview.png)
+
+---
+
+## 🚀 Key Features
+
+* **Drop-Down Visor (`Win + §`):** Smoothly toggles from the top on whichever monitor currently holds your **mouse cursor**. If already open on another display, pressing `Win + §` immediately hops the visor over to your current screen.
+* **Smart Dynamic 2×2 Tiling (`Alt + Enter`):**
+  * **1 Terminal:** Top visor (100% width, 40% screen height, borderless).
+  * **2 Terminals:** Top row side-by-side (50% / 50% width, vertical cyan seam).
+  * **3 Terminals:** 2 on top (50% each), 1 across the bottom (T-split cyan seams).
+  * **4 Terminals:** Clean 2×2 quad grid (50% width & 50% height each, cyan cross seams).
+* **Adjacent Cyan Dividers:** 
+  * Only borders between neighboring terminals are colored (outer screen edges remain completely clean and borderless).
+  * Rendered as click-through overlay bars (`+E0x20` / `WS_EX_TRANSPARENT`), so mouse selections pass directly into the terminal without interference.
+  * `-DPIScale` enforcement ensures pixel-perfect coordinates on high-DPI displays (125%, 150%, etc.) with zero bleed across monitors.
+* **Auto-Rebalancing (`Alt + W`):** Closing any terminal automatically collapses and re-tiles the remaining ones.
+* **Keyboard Pane Navigation (`Alt + Arrows`):** Hop typing focus between splits without touching the mouse.
+* **Taskbar Awareness:** Respects custom work areas (such as left-docked taskbars) using `MonitorGetWorkArea`.
+
+---
+
+## ⌨️ Shortcuts Reference
+
+| Shortcut | Context | Description |
+| :--- | :--- | :--- |
+| **`Win + §`** | **Global** | Toggle terminal visor (shows / hides on monitor under mouse cursor) |
+| **`Alt + Enter`** | Inside Alacritty | Spawn a new split (auto-tiles into 1 → 2 → 3 → 4 layout) |
+| **`Alt + W`** | Inside Alacritty | Close focused split and smoothly rebalance remaining windows |
+| **`Alt + R`** | Inside Alacritty | Force re-tile / balance windows |
+| **`Alt + Left` / `Right`** | Inside Alacritty | Move active typing focus between left & right panes |
+| **`Alt + Up` / `Down`** | Inside Alacritty | Move active typing focus between top & bottom panes |
+
+---
+
+## 📦 Prerequisites
+
+Run the following commands in PowerShell to install the prerequisites:
+
+```powershell
+# 1. Alacritty Terminal
+winget install -e --id Alacritty.Alacritty
+
+# 2. AutoHotkey v2 (required for window management)
+winget install -e --id AutoHotkey.AutoHotkey
+
+# 3. JetBrainsMono Nerd Font (icons & glyphs)
+winget install -e --id DEVCOM.JetBrainsMonoNerdFont
+```
+
+---
+
+## ⚡ Quick Start
+
+### Option A: Using the Automated Install Script
+Run PowerShell from inside the repository folder:
+
+```powershell
+# Standard deployment (copies files and sets up Windows Startup)
+.\install.ps1
+
+# Or with automatic dependency installation and symbolic links:
+.\install.ps1 -InstallDependencies -UseSymlinks -CreateStartupShortcut
+```
+
+### Option B: Manual Setup
+1. Copy `alacritty.toml` and `quake_alacritty.ahk` to your configuration folder:
+   ```
+   C:\Users\<YourUsername>\AppData\Roaming\alacritty\
+   ```
+2. Run `quake_alacritty.ahk` with AutoHotkey v2.
+3. Press **`Win + §`** anywhere to summon your terminal!
+
+---
+
+## 🎨 Customization
+
+### Changing the Seam Color & Thickness
+Edit the top of [`quake_alacritty.ahk`](quake_alacritty.ahk):
+```autohotkey
+global g_BorderGap   := 2          ; Seam thickness in pixels (1-3px)
+global g_BorderColor := "38bdf8"   ; Vibrant electric cyan (hex RGB)
+```
+* **Electric Cyan:** `"38bdf8"`
+* **One Dark Cyan:** `"56b6c2"`
+* **Purple / Magenta:** `"c678dd"`
+* **Subtle Dark Gray:** `"3e4452"`
+
+### Adjusting Opacity & Blur
+Edit [`alacritty.toml`](alacritty.toml):
+```toml
+[window]
+opacity = 0.70    # 0.0 is completely transparent, 1.0 is solid
+blur = true       # Windows 11 Acrylic blur effect
+decorations = "None"
+```
+
+---
+
+## 📄 License
+MIT License. Feel free to use, modify, and share!
