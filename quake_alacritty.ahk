@@ -331,6 +331,121 @@ FocusDirection(dir)
         WinActivate("ahk_id " bestHwnd)
 }
 
+; Helper: Swap position of active terminal with adjacent terminal in given direction
+SwapDirection(dir)
+{
+    activeHwnd := WinActive("A")
+    if (!activeHwnd)
+        return
+
+    realWindows := GetAlacrittyWindows()
+    if (realWindows.Length <= 1)
+        return
+
+    ; Ensure g_AlacrittyOrder is synchronized with current live windows
+    global g_AlacrittyOrder
+    SyncWindowOrder(realWindows)
+
+    WinGetPos(&ax, &ay, &aw, &ah, "ahk_id " activeHwnd)
+    acx := ax + (aw / 2)
+    acy := ay + (ah / 2)
+
+    bestHwnd := 0
+    bestDist := 99999999
+
+    for hwnd in realWindows
+    {
+        if (hwnd == activeHwnd)
+            continue
+
+        WinGetPos(&tx, &ty, &tw, &th, "ahk_id " hwnd)
+        tcx := tx + (tw / 2)
+        tcy := ty + (th / 2)
+
+        valid := false
+        if (dir == "left"  && tcx < acx - 50)
+            valid := true
+        else if (dir == "right" && tcx > acx + 50)
+            valid := true
+        else if (dir == "up"    && tcy < acy - 50)
+            valid := true
+        else if (dir == "down"  && tcy > acy + 50)
+            valid := true
+
+        if (valid)
+        {
+            dist := (tcx - acx)**2 + (tcy - acy)**2
+            ; Tie-breaker: If distances are almost equal (within 100px difference),
+            ; prefer the window further to the left (smaller tcx) or higher up (smaller tcy)
+            if (dist < bestDist - 100 || (Abs(dist - bestDist) <= 100 && tcx < acx))
+            {
+                bestDist := dist
+                bestHwnd := hwnd
+            }
+        }
+    }
+
+    if (!bestHwnd)
+        return
+
+    ; Swap activeHwnd and bestHwnd inside g_AlacrittyOrder
+    idxActive := 0
+    idxTarget := 0
+
+    for idx, hwnd in g_AlacrittyOrder
+    {
+        if (hwnd == activeHwnd)
+            idxActive := idx
+        else if (hwnd == bestHwnd)
+            idxTarget := idx
+    }
+
+    if (idxActive && idxTarget)
+    {
+        g_AlacrittyOrder[idxActive] := bestHwnd
+        g_AlacrittyOrder[idxTarget] := activeHwnd
+
+        TileAlacritty()
+        WinActivate("ahk_id " activeHwnd)
+    }
+}
+
+; Helper: Rotate all terminal pane positions cyclically
+RotateWindows(clockwise := true)
+{
+    activeHwnd := WinActive("A")
+    if (!activeHwnd)
+        return
+
+    realWindows := GetAlacrittyWindows()
+    if (realWindows.Length <= 1)
+        return
+
+    global g_AlacrittyOrder
+    SyncWindowOrder(realWindows)
+
+    if (g_AlacrittyOrder.Length <= 1)
+        return
+
+    if (clockwise)
+    {
+        ; Shift last item to the front
+        lastItem := g_AlacrittyOrder.Pop()
+        g_AlacrittyOrder.InsertAt(1, lastItem)
+    }
+    else
+    {
+        ; Shift first item to the back
+        firstItem := g_AlacrittyOrder.RemoveAt(1)
+        g_AlacrittyOrder.Push(firstItem)
+    }
+
+    TileAlacritty()
+    if (activeHwnd)
+        WinActivate("ahk_id " activeHwnd)
+}
+
+
 ; -------------------------------------------------------------
 ; Global Dropdown Toggle (Win + §)
 ; -------------------------------------------------------------
@@ -422,5 +537,14 @@ FocusDirection(dir)
 !Right:: FocusDirection("right")
 !Up::    FocusDirection("up")
 !Down::  FocusDirection("down")
+
+; Alt + Shift + Arrow keys: Swap position of active pane with adjacent pane
+!+Left::  SwapDirection("left")
+!+Right:: SwapDirection("right")
+!+Up::    SwapDirection("up")
+!+Down::  SwapDirection("down")
+
+; Alt + Shift + Space: Rotate all pane positions cyclically
+!+Space:: RotateWindows()
 
 #HotIf
