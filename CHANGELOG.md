@@ -13,6 +13,31 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ### Major
 _None_
 ### Minor
+_None_
+
+## Fixes
+### Major
+_None_
+### Minor
+_None_
+
+## Window Management & Multi-Monitor
+_None_
+
+## Styling & Appearance
+_None_
+
+## Configuration & Tooling
+_None_
+
+---
+
+## [0.2.0] - 2026-10-15
+
+## Features
+### Major
+_None_
+### Minor
 - **Pane Position Swapping (`Alt + Shift + Arrows`)**: Swap the active terminal pane with its adjacent neighbor (left, right, up, down) using geometric center-point proximity calculation and continuous keyboard focus retention.
 - **Cyclic Pane Rotation (`Alt + Shift + Space`)**: Cyclically rotate all pane positions clockwise across the active grid layout with zero directional ambiguity.
 - **Development Script Reload (`Alt + Ctrl + R`)**: Instant in-process AutoHotkey reload for immediate development feedback and configuration updates without terminal intervention.
