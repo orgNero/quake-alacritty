@@ -19,10 +19,10 @@ _None_
 ### Major
 _None_
 ### Minor
-_None_
+- **Split Focus on Creation (`Alt + Enter`)**: Automatically shift keyboard typing focus to newly spawned Alacritty split terminals using `WinActivate` after dynamic grid retiling, preventing focus from remaining stuck in the parent pane.
 
 ## Window Management & Multi-Monitor
-_None_
+- **Live HWND Differential Tracking**: Enhanced `SpawnSplit()` to capture pre- and post-launch window sets, accurately isolating the new window ID and ensuring reliable focus transfer across multi-monitor setups.
 
 ## Styling & Appearance
 _None_
