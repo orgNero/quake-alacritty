@@ -42,7 +42,7 @@ if (-not (Test-Path $TargetDir)) {
     New-Item -ItemType Directory -Path $TargetDir -Force | Out-Null
 }
 
-$filesToDeploy = @("quake_alacritty.ahk", "alacritty.toml")
+$filesToDeploy = @("quake_alacritty.ahk", "alacritty.toml", "config.ini")
 foreach ($file in $filesToDeploy) {
     $src = Join-Path $SourceDir $file
     $dst = Join-Path $TargetDir $file
@@ -53,8 +53,12 @@ foreach ($file in $filesToDeploy) {
             New-Item -ItemType SymbolicLink -Path $dst -Target $src -Force | Out-Null
             Write-Host "  [Link] $file -> $dst" -ForegroundColor Green
         } else {
-            Copy-Item -Path $src -Destination $dst -Force
-            Write-Host "  [Copy] $file -> $dst" -ForegroundColor Green
+            if ($file -eq "config.ini" -and (Test-Path $dst)) {
+                Write-Host "  [Skip] $file already exists at destination (preserving user configuration)" -ForegroundColor Cyan
+            } else {
+                Copy-Item -Path $src -Destination $dst -Force
+                Write-Host "  [Copy] $file -> $dst" -ForegroundColor Green
+            }
         }
     }
 }
