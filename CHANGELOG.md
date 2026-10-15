@@ -15,6 +15,7 @@ _None_
 ### Minor
 - **Pane Position Swapping (`Alt + Shift + Arrows`)**: Swap the active terminal pane with its adjacent neighbor (left, right, up, down) using geometric center-point proximity calculation and continuous keyboard focus retention.
 - **Cyclic Pane Rotation (`Alt + Shift + Space`)**: Cyclically rotate all pane positions clockwise across the active grid layout with zero directional ambiguity.
+- **Development Script Reload (`Alt + Ctrl + R`)**: Instant in-process AutoHotkey reload for immediate development feedback and configuration updates without terminal intervention.
 
 ## Fixes
 ### Major
@@ -23,7 +24,8 @@ _None_
 _None_
 
 ## Window Management & Multi-Monitor
-- Added `SwapDirection()` and `RotateWindows()` to manipulate the internal `g_AlacrittyOrder` array followed by `TileAlacritty()` re-render, guaranteeing reliable layout persistence and zero focus loss.
+- **Instant Snap Performance (`SetWinDelay -1`)**: Disabled artificial AutoHotkey window delays (`SetWinDelay -1`, `SetControlDelay -1`), eliminating 100ms pauses between individual `WinMove` / `WinShow` calls for instantaneous pane swapping.
+- **Adaptive Split Spawning**: Replaced static `Sleep 350` and `Sleep 200` delays in `Alt + Enter`, `Alt + W`, and `#§` with adaptive 15ms polling loops, shaving up to ~250ms off terminal split launch and collapse times.
 
 ## Styling & Appearance
 _None_
