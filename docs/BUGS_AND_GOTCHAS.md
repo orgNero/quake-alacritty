@@ -169,18 +169,34 @@ Always explicitly re-assert focus on the active terminal window using `WinActiva
 
 ---
 
-## 9. Launching AHK as a Persistent Process from Shell Runners / PowerShell
+## 9. Process Reaping from Transient Job Objects
 
 ### Symptom
-- Invoking `AutoHotkey64.exe` from a PowerShell script, automated runner, or child terminal exits immediately after the spawning shell process terminates, killing the visor daemon.
+- When an agent or automated script runner reloads AutoHotkey, the script seems to disappear from the system tray and never restarts.
 
 ### Root Cause
-When an AHK process is launched directly as a child of a non-interactive PowerShell session or job object, Windows reaps child processes when the parent job or shell session closes.
+Terminal processes in automated runner environments run inside Windows Job Objects with `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE`. When the subshell command finishes, Windows terminates all child processes in the job tree, killing the newly started AutoHotkey instance.
+
+---
+
+## 10. Windows Desktop Isolation (`exebox-...` vs `Default` Interactive Desktop)
+
+### Symptom
+- An AutoHotkey process appears alive in `Get-Process`, but the green "H" icon is nowhere to be found in the user's system tray / hidden icons menu, and hotkeys (`Win + §`) do nothing.
+
+### Root Cause
+Automated agents (e.g. Antigravity) run PowerShell commands inside an isolated virtual desktop (e.g. `exebox-V6P2PAEPO2SSFNP233JKLLSLCI`) within `WinSta0`.
+When `Start-Process` or `AutoHotkey64.exe` is launched from this shell, Windows places the process on that hidden runner desktop instead of the user's interactive `Default` desktop:
+1. `Shell_NotifyIcon` cannot communicate with `Shell_TrayWnd` on `Default` (no tray icon appears in the user's taskbar).
+2. Low-level keyboard hooks (`WH_KEYBOARD_LL`) registered on the hidden desktop do not intercept keystrokes typed on the user's `Default` desktop.
 
 ### Established Solution
-Launch via the Windows shell/explorer process:
-```powershell
-Start-Process explorer.exe "$env:APPDATA\alacritty\quake_alacritty.ahk"
-```
-Or create/invoke the shortcut `.lnk` in Windows Startup. Windows Explorer detaches the process and hosts it cleanly inside Session 1 (the interactive user desktop).
+To launch into the true interactive user desktop from an agent shell:
+1. **Interactive Task Scheduler Dispatch**:
+   Register a temporary task using `New-ScheduledTaskPrincipal -LogonType Interactive -UserId $env:USERNAME`, trigger it immediately with `Start-ScheduledTask`, and clean it up. Task Scheduler forces the execution onto the user's interactive `Default` desktop.
+2. **User Startup Shortcut**:
+   Keep a persistent shortcut at `%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup\quake_alacritty.lnk` that the user or Windows login can execute directly on the `Default` desktop.
+3. **In-Script `Reload()` Hotkey**:
+   Use `!^r::Reload()` so the script reloads from within the interactive desktop, never going through external shell runners.
+
 
