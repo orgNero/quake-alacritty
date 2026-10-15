@@ -19,10 +19,10 @@ _None_
 ### Major
 _None_
 ### Minor
-_None_
+- **Cold-Start Visor Focus (`Win + §`)**: Automatically shift keyboard typing focus via `WinActivate` to the newly launched Alacritty terminal on initial cold start, preventing focus from remaining on background desktop applications.
 
 ## Window Management & Multi-Monitor
-_None_
+- **Adaptive Cold-Start Polling**: Extended initial window appearance polling in `ToggleVisor()` to accommodate GPU context initialization during fresh process launch before asserting window focus.
 
 ## Styling & Appearance
 _None_
