@@ -44,6 +44,7 @@ Features mouse-aware multi-monitor detection, dynamic 2×2 quad grid tiling, acr
 | **`Alt + Shift + Left` / `Right`** | Inside Alacritty | Swap active pane position with left / right neighbor |
 | **`Alt + Shift + Up` / `Down`** | Inside Alacritty | Swap active pane position with top / bottom neighbor |
 | **`Alt + Shift + Space`** | Inside Alacritty | Rotate all terminal pane positions cyclically clockwise |
+| **`Alt + Ctrl + R`** | Inside Alacritty | Instant in-process script reload (development & config refresh) |
 
 ---
 

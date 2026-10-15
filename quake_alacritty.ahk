@@ -2,6 +2,9 @@
 #SingleInstance Force
 Persistent true
 DetectHiddenWindows true
+SetWinDelay -1
+SetControlDelay -1
+
 
 ; Visual separator styling for adjacent terminal borders
 global g_BorderGap   := 2          ; Gap thickness in pixels between adjacent terminals
@@ -461,11 +464,12 @@ RotateWindows(clockwise := true)
     if (windows.Length == 0)
     {
         Run("alacritty.exe")
-        if WinWait("ahk_exe alacritty.exe",, 3)
-        {
-            Sleep 250
-            TileAlacritty(targetMon)
+        Loop 30 {
+            Sleep 20
+            if (GetAlacrittyWindows().Length > 0)
+                break
         }
+        TileAlacritty(targetMon)
         return
     }
 
@@ -512,8 +516,14 @@ RotateWindows(clockwise := true)
 ; Alt + Enter: Split window (spawns new terminal and dynamically re-tiles into grid)
 !Enter::
 {
+    oldCount := GetAlacrittyWindows().Length
     Run("alacritty.exe")
-    Sleep 350  ; Give new window time to spawn
+    ; Adaptive polling: tile immediately once new window appears (up to 450ms max)
+    Loop 30 {
+        Sleep 15
+        if (GetAlacrittyWindows().Length > oldCount)
+            break
+    }
     TileAlacritty()
 }
 
@@ -522,9 +532,18 @@ RotateWindows(clockwise := true)
 {
     activeHwnd := WinActive("A")
     WinClose("ahk_id " activeHwnd)
-    Sleep 200
+    ; Adaptive polling: re-tile immediately once window closes (up to 200ms max)
+    Loop 20 {
+        Sleep 10
+        if (!WinExist("ahk_id " activeHwnd))
+            break
+    }
     TileAlacritty()
 }
+
+; Alt + Ctrl + R: Clean in-process script reload for development
+!^r::Reload()
+
 
 ; Alt + R: Force re-tile
 !r::
