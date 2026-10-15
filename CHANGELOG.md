@@ -19,6 +19,31 @@ _None_
 ### Major
 _None_
 ### Minor
+_None_
+
+## Window Management & Multi-Monitor
+_None_
+
+## Styling & Appearance
+_None_
+
+## Configuration & Tooling
+_None_
+
+---
+
+## [0.3.2] - 2026-10-15
+
+## Features
+### Major
+_None_
+### Minor
+_None_
+
+## Fixes
+### Major
+_None_
+### Minor
 - **Cold-Start Visor Focus (`Win + §`)**: Automatically shift keyboard typing focus via `WinActivate` to the newly launched Alacritty terminal on initial cold start, preventing focus from remaining on background desktop applications.
 
 ## Window Management & Multi-Monitor
