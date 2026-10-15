@@ -79,7 +79,7 @@ Run PowerShell from inside the repository folder:
 ```
 
 ### Option B: Manual Setup
-1. Copy `alacritty.toml` and `quake_alacritty.ahk` to your configuration folder:
+1. Copy `alacritty.toml`, `quake_alacritty.ahk`, and `config.ini` to your configuration folder:
    ```
    C:\Users\<YourUsername>\AppData\Roaming\alacritty\
    ```
@@ -90,16 +90,58 @@ Run PowerShell from inside the repository folder:
 
 ## 🎨 Customization
 
-### Changing the Seam Color & Thickness
-Edit the top of [`quake_alacritty.ahk`](quake_alacritty.ahk):
-```autohotkey
-global g_BorderGap   := 2          ; Seam thickness in pixels (1-3px)
-global g_BorderColor := "38bdf8"   ; Vibrant electric cyan (hex RGB)
+Quake Alacritty uses a clean separation of concerns:
+- **`config.ini`**: Governs wrapper behavior, window dimensions, seam borders, and all hotkey bindings.
+- **`alacritty.toml`**: Governs terminal styling, font definitions, opacity, and Windows 11 acrylic blur.
+
+### Configuration File (`config.ini`)
+Located at `%APPDATA%\alacritty\config.ini` (or the repository root):
+
+```ini
+[General]
+FirstRun=true
+MultiMonitorMode=hopping
+
+[Appearance]
+; Seam divider thickness in pixels (1-5px)
+BorderGap=2
+
+; Seam divider hex RGB color (without # prefix)
+; Electric Cyan: 38bdf8 | One Dark Cyan: 56b6c2 | Purple: c678dd | Gray: 3e4452
+BorderColor=38bdf8
+
+; Visor height coverage percentage for the top visor row (20-90)
+VisorHeightPercent=40
+
+[Hotkeys]
+; Global toggle hotkey (shows / hides visor on monitor under mouse cursor)
+; #sc029 is Win + § (the key directly under Escape on Swedish/Nordic keyboards)
+ToggleVisor=#sc029
+
+; Window management shortcuts (active while inside Alacritty)
+SplitWindow=!Enter
+CloseWindow=!w
+Retile=!r
+
+; Focus navigation
+FocusLeft=!Left
+FocusRight=!Right
+FocusUp=!Up
+FocusDown=!Down
+
+; Position swapping & rotation
+SwapLeft=!+Left
+SwapRight=!+Right
+SwapUp=!+Up
+SwapDown=!+Down
+RotatePanes=!+Space
+
+; Development in-process reload
+ReloadScript=!^r
 ```
-* **Electric Cyan:** `"38bdf8"`
-* **One Dark Cyan:** `"56b6c2"`
-* **Purple / Magenta:** `"c678dd"`
-* **Subtle Dark Gray:** `"3e4452"`
+
+> [!TIP]
+> After saving changes in `config.ini`, press **`Alt + Ctrl + R`** while inside Alacritty to instantly reload settings without restarting the terminal!
 
 ### Adjusting Opacity & Blur
 Edit [`alacritty.toml`](alacritty.toml):

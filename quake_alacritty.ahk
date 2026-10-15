@@ -6,13 +6,145 @@ SetWinDelay -1
 SetControlDelay -1
 
 
-; Visual separator styling for adjacent terminal borders
-global g_BorderGap   := 2          ; Gap thickness in pixels between adjacent terminals
-global g_BorderColor := "38bdf8"   ; Vibrant electric cyan (hex RGB)
+; -------------------------------------------------------------
+; Global Configuration & State
+; -------------------------------------------------------------
+global g_ConfigFile         := ""
+global g_BorderGap          := 2
+global g_BorderColor        := "38bdf8"
+global g_VisorHeightPercent := 0.40
+global g_MultiMonitorMode   := "hopping"
+global g_FirstRun           := false
 
-; Stable window order tracker across splits and closes
-global g_AlacrittyOrder := []
-global g_Dividers := []
+; Hotkey mappings (defaults if config is absent or partial)
+global g_KeyToggleVisor     := "#sc029"
+global g_KeySplit           := "!Enter"
+global g_KeyClose           := "!w"
+global g_KeyRetile          := "!r"
+global g_KeyFocusLeft       := "!Left"
+global g_KeyFocusRight      := "!Right"
+global g_KeyFocusUp         := "!Up"
+global g_KeyFocusDown       := "!Down"
+global g_KeySwapLeft        := "!+Left"
+global g_KeySwapRight       := "!+Right"
+global g_KeySwapUp          := "!+Up"
+global g_KeySwapDown        := "!+Down"
+global g_KeyRotate          := "!+Space"
+global g_KeyReload          := "!^r"
+
+; Window & Divider trackers
+global g_AlacrittyOrder     := []
+global g_Dividers           := []
+
+; Helper: Resolves configuration file location and loads user preferences
+LoadConfig()
+{
+    global g_ConfigFile, g_BorderGap, g_BorderColor, g_VisorHeightPercent, g_MultiMonitorMode, g_FirstRun
+    global g_KeyToggleVisor, g_KeySplit, g_KeyClose, g_KeyRetile
+    global g_KeyFocusLeft, g_KeyFocusRight, g_KeyFocusUp, g_KeyFocusDown
+    global g_KeySwapLeft, g_KeySwapRight, g_KeySwapUp, g_KeySwapDown
+    global g_KeyRotate, g_KeyReload
+
+    ; 1. Resolve path (%APPDATA%\alacritty\config.ini or local repository)
+    appDataPath := EnvGet("APPDATA") . "\alacritty\config.ini"
+    localPath   := A_ScriptDir . "\config.ini"
+
+    if FileExist(appDataPath)
+        g_ConfigFile := appDataPath
+    else if FileExist(localPath)
+        g_ConfigFile := localPath
+    else
+        g_ConfigFile := appDataPath
+
+    if (!FileExist(g_ConfigFile))
+        return
+
+    ; 2. [General]
+    try {
+        frVal := IniRead(g_ConfigFile, "General", "FirstRun", "false")
+        g_FirstRun := (frVal = "true" || frVal = "1")
+        g_MultiMonitorMode := IniRead(g_ConfigFile, "General", "MultiMonitorMode", "hopping")
+    }
+
+    ; 3. [Appearance]
+    try {
+        gapVal := Integer(IniRead(g_ConfigFile, "Appearance", "BorderGap", "2"))
+        if (gapVal >= 0 && gapVal <= 10)
+            g_BorderGap := gapVal
+
+        colVal := Trim(IniRead(g_ConfigFile, "Appearance", "BorderColor", "38bdf8"))
+        if (colVal != "")
+            g_BorderColor := StrReplace(colVal, "#", "")
+
+        vhVal := Integer(IniRead(g_ConfigFile, "Appearance", "VisorHeightPercent", "40"))
+        if (vhVal >= 10 && vhVal <= 100)
+            g_VisorHeightPercent := vhVal / 100.0
+    }
+
+    ; 4. [Hotkeys]
+    try {
+        g_KeyToggleVisor := IniRead(g_ConfigFile, "Hotkeys", "ToggleVisor", g_KeyToggleVisor)
+        g_KeySplit       := IniRead(g_ConfigFile, "Hotkeys", "SplitWindow", g_KeySplit)
+        g_KeyClose       := IniRead(g_ConfigFile, "Hotkeys", "CloseWindow", g_KeyClose)
+        g_KeyRetile      := IniRead(g_ConfigFile, "Hotkeys", "Retile", g_KeyRetile)
+        g_KeyFocusLeft   := IniRead(g_ConfigFile, "Hotkeys", "FocusLeft", g_KeyFocusLeft)
+        g_KeyFocusRight  := IniRead(g_ConfigFile, "Hotkeys", "FocusRight", g_KeyFocusRight)
+        g_KeyFocusUp     := IniRead(g_ConfigFile, "Hotkeys", "FocusUp", g_KeyFocusUp)
+        g_KeyFocusDown   := IniRead(g_ConfigFile, "Hotkeys", "FocusDown", g_KeyFocusDown)
+        g_KeySwapLeft    := IniRead(g_ConfigFile, "Hotkeys", "SwapLeft", g_KeySwapLeft)
+        g_KeySwapRight   := IniRead(g_ConfigFile, "Hotkeys", "SwapRight", g_KeySwapRight)
+        g_KeySwapUp      := IniRead(g_ConfigFile, "Hotkeys", "SwapUp", g_KeySwapUp)
+        g_KeySwapDown    := IniRead(g_ConfigFile, "Hotkeys", "SwapDown", g_KeySwapDown)
+        g_KeyRotate      := IniRead(g_ConfigFile, "Hotkeys", "RotatePanes", g_KeyRotate)
+        g_KeyReload      := IniRead(g_ConfigFile, "Hotkeys", "ReloadScript", g_KeyReload)
+    }
+}
+
+; Helper: Binds dynamic hotkeys from configuration
+RegisterHotkeys()
+{
+    ; Global visor toggle
+    if (g_KeyToggleVisor != "")
+    {
+        try Hotkey(g_KeyToggleVisor, (*) => ToggleVisor())
+        catch {
+            try Hotkey("#sc029", (*) => ToggleVisor())
+        }
+    }
+
+    ; Context-sensitive hotkeys inside Alacritty
+    HotIfWinActive("ahk_exe alacritty.exe")
+
+    RegisterKey(g_KeySplit,      (*) => SpawnSplit())
+    RegisterKey(g_KeyClose,      (*) => CloseSplit())
+    RegisterKey(g_KeyRetile,     (*) => TileAlacritty())
+    RegisterKey(g_KeyFocusLeft,  (*) => FocusDirection("left"))
+    RegisterKey(g_KeyFocusRight, (*) => FocusDirection("right"))
+    RegisterKey(g_KeyFocusUp,    (*) => FocusDirection("up"))
+    RegisterKey(g_KeyFocusDown,  (*) => FocusDirection("down"))
+    RegisterKey(g_KeySwapLeft,   (*) => SwapDirection("left"))
+    RegisterKey(g_KeySwapRight,  (*) => SwapDirection("right"))
+    RegisterKey(g_KeySwapUp,     (*) => SwapDirection("up"))
+    RegisterKey(g_KeySwapDown,   (*) => SwapDirection("down"))
+    RegisterKey(g_KeyRotate,     (*) => RotateWindows())
+    RegisterKey(g_KeyReload,     (*) => Reload())
+
+    HotIfWinActive()
+}
+
+RegisterKey(keyName, callback)
+{
+    if (keyName != "")
+    {
+        try Hotkey(keyName, callback)
+    }
+}
+
+; Initialize configuration and register hotkeys
+LoadConfig()
+RegisterHotkeys()
+A_IconTip := "Quake Alacritty"
+
 
 ; Helper: Clears and destroys active divider lines
 ClearDividers()
@@ -226,7 +358,7 @@ TileAlacritty(targetMon := 0)
     gap := (count > 1) ? g_BorderGap : 0
     if (botCount == 0)
     {
-        topHeight := Floor(totalHeight * 0.40)
+        topHeight := Floor(totalHeight * g_VisorHeightPercent)
         botHeight := 0
         botY      := 0
     }
@@ -450,9 +582,11 @@ RotateWindows(clockwise := true)
 
 
 ; -------------------------------------------------------------
-; Global Dropdown Toggle (Win + §)
+; Window Management Actions
 ; -------------------------------------------------------------
-#§::
+
+; Toggles the terminal visor on the display containing the mouse cursor
+ToggleVisor()
 {
     DetectHiddenWindows true
     windows := GetAlacrittyWindows()
@@ -508,13 +642,8 @@ RotateWindows(clockwise := true)
     }
 }
 
-; -------------------------------------------------------------
-; Controls while inside Alacritty
-; -------------------------------------------------------------
-#HotIf WinActive("ahk_exe alacritty.exe")
-
-; Alt + Enter: Split window (spawns new terminal and dynamically re-tiles into grid)
-!Enter::
+; Spawns a new split terminal and dynamically re-tiles into grid
+SpawnSplit()
 {
     oldCount := GetAlacrittyWindows().Length
     Run("alacritty.exe")
@@ -527,8 +656,8 @@ RotateWindows(clockwise := true)
     TileAlacritty()
 }
 
-; Alt + W: Close focused window and auto-rebalance remaining windows
-!w::
+; Closes focused window and auto-rebalances remaining windows
+CloseSplit()
 {
     activeHwnd := WinActive("A")
     WinClose("ahk_id " activeHwnd)
@@ -540,30 +669,3 @@ RotateWindows(clockwise := true)
     }
     TileAlacritty()
 }
-
-; Alt + Ctrl + R: Clean in-process script reload for development
-!^r::Reload()
-
-
-; Alt + R: Force re-tile
-!r::
-{
-    TileAlacritty()
-}
-
-; Alt + Arrow keys: Switch typing focus between panes without touching the mouse
-!Left::  FocusDirection("left")
-!Right:: FocusDirection("right")
-!Up::    FocusDirection("up")
-!Down::  FocusDirection("down")
-
-; Alt + Shift + Arrow keys: Swap position of active pane with adjacent pane
-!+Left::  SwapDirection("left")
-!+Right:: SwapDirection("right")
-!+Up::    SwapDirection("up")
-!+Down::  SwapDirection("down")
-
-; Alt + Shift + Space: Rotate all pane positions cyclically
-!+Space:: RotateWindows()
-
-#HotIf
