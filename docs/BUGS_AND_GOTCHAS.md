@@ -166,3 +166,21 @@ When AutoHotkey issues `WinMove`, `WinHide`, or recreates divider GUIs, the Wind
 
 ### Established Solution
 Always explicitly re-assert focus on the active terminal window using `WinActivate("ahk_id " targetHwnd)` after layout operations.
+
+---
+
+## 9. Launching AHK as a Persistent Process from Shell Runners / PowerShell
+
+### Symptom
+- Invoking `AutoHotkey64.exe` from a PowerShell script, automated runner, or child terminal exits immediately after the spawning shell process terminates, killing the visor daemon.
+
+### Root Cause
+When an AHK process is launched directly as a child of a non-interactive PowerShell session or job object, Windows reaps child processes when the parent job or shell session closes.
+
+### Established Solution
+Launch via the Windows shell/explorer process:
+```powershell
+Start-Process explorer.exe "$env:APPDATA\alacritty\quake_alacritty.ahk"
+```
+Or create/invoke the shortcut `.lnk` in Windows Startup. Windows Explorer detaches the process and hosts it cleanly inside Session 1 (the interactive user desktop).
+
