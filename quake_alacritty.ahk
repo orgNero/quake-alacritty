@@ -598,12 +598,27 @@ ToggleVisor()
     if (windows.Length == 0)
     {
         Run("alacritty.exe")
-        Loop 30 {
+        firstHwnd := 0
+        ; Adaptive polling: tile immediately once window appears (up to 1.5s cold start)
+        Loop 75 {
             Sleep 20
-            if (GetAlacrittyWindows().Length > 0)
+            firstWins := GetAlacrittyWindows()
+            if (firstWins.Length > 0)
+            {
+                firstHwnd := firstWins[1]
                 break
+            }
         }
         TileAlacritty(targetMon)
+
+        if (firstHwnd)
+            WinActivate("ahk_id " firstHwnd)
+        else
+        {
+            firstWins := GetAlacrittyWindows()
+            if (firstWins.Length > 0)
+                WinActivate("ahk_id " firstWins[1])
+        }
         return
     }
 
