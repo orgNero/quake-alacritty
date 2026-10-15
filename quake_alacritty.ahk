@@ -642,18 +642,49 @@ ToggleVisor()
     }
 }
 
-; Spawns a new split terminal and dynamically re-tiles into grid
+; Spawns a new split terminal, dynamically re-tiles into grid, and shifts focus to the new split
 SpawnSplit()
 {
-    oldCount := GetAlacrittyWindows().Length
+    global g_AlacrittyOrder
+    oldWindows := GetAlacrittyWindows()
+    oldCount := oldWindows.Length
     Run("alacritty.exe")
+
+    newHwnd := 0
     ; Adaptive polling: tile immediately once new window appears (up to 450ms max)
     Loop 30 {
         Sleep 15
-        if (GetAlacrittyWindows().Length > oldCount)
+        currentWindows := GetAlacrittyWindows()
+        if (currentWindows.Length > oldCount)
+        {
+            for hwnd in currentWindows
+            {
+                isOld := false
+                for oldH in oldWindows
+                {
+                    if (hwnd == oldH)
+                    {
+                        isOld := true
+                        break
+                    }
+                }
+                if (!isOld)
+                {
+                    newHwnd := hwnd
+                    break
+                }
+            }
             break
+        }
     }
+
     TileAlacritty()
+
+    ; Shift keyboard typing focus to the newly created split terminal
+    if (newHwnd)
+        WinActivate("ahk_id " newHwnd)
+    else if (g_AlacrittyOrder.Length > oldCount)
+        WinActivate("ahk_id " g_AlacrittyOrder[g_AlacrittyOrder.Length])
 }
 
 ; Closes focused window and auto-rebalances remaining windows
