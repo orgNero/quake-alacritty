@@ -32,6 +32,32 @@ _None_
 
 ---
 
+## [0.3.0] - 2026-10-15
+
+## Features
+### Major
+- **Unified Configuration Engine (`config.ini`)**: Introduced centralized `.ini` configuration for Quake Alacritty wrapper behavior. Users can now customize hotkeys, seam borders, and visor height without modifying AutoHotkey scripts.
+### Minor
+- **Dynamic Hotkey Registration**: Replaced static AutoHotkey declarations with dynamic `Hotkey()` bindings, allowing any visor shortcut (including `ToggleVisor`, `SplitWindow`, `CloseWindow`, `Retile`, directional focus navigation, pane swapping, and cyclic rotation) to be rebound from `config.ini`.
+- **Configurable Visor Coverage**: Added `VisorHeightPercent` setting in `config.ini` to let users adjust the top visor row coverage (from 10% to 100% of work area height).
+
+## Fixes
+### Major
+_None_
+### Minor
+- **Configuration Preservation on Reinstall**: Updated `install.ps1` to prevent overwriting existing `%APPDATA%\alacritty\config.ini` during standard deployments, preserving user preferences across updates.
+
+## Window Management & Multi-Monitor
+- **Dynamic Layout Height**: `TileAlacritty()` dynamically calculates top row visor height based on `VisorHeightPercent` from `config.ini`.
+
+## Styling & Appearance
+- **Customizable Seam Borders**: Border gap thickness (`BorderGap`) and hex color (`BorderColor`) are now loaded directly from `config.ini` and applied dynamically to click-through divider GUIs.
+
+## Configuration & Tooling
+- **Deployment & Schema**: Added default `config.ini` template to repository and updated `install.ps1` to deploy `config.ini` alongside `alacritty.toml` and `quake_alacritty.ahk`.
+
+---
+
 ## [0.2.0] - 2026-10-15
 
 ## Features
