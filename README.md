@@ -26,6 +26,7 @@ Features mouse-aware multi-monitor detection, dynamic 2×2 quad grid tiling, acr
   * `-DPIScale` enforcement ensures pixel-perfect coordinates on high-DPI displays (125%, 150%, etc.) with zero bleed across monitors.
 * **Auto-Rebalancing (`Alt + W`):** Closing any terminal automatically collapses and re-tiles the remaining ones.
 * **Keyboard Pane Navigation (`Alt + Arrows`):** Hop typing focus between splits without touching the mouse.
+* **Window Swapping & Rotation (`Alt + Shift + Arrows`, `Alt + Shift + Space`):** Rearrange panes on the fly by swapping with adjacent windows or rotating all positions cyclically without losing keyboard focus.
 * **Taskbar Awareness:** Respects custom work areas (such as left-docked taskbars) using `MonitorGetWorkArea`.
 
 ---
@@ -40,6 +41,10 @@ Features mouse-aware multi-monitor detection, dynamic 2×2 quad grid tiling, acr
 | **`Alt + R`** | Inside Alacritty | Force re-tile / balance windows |
 | **`Alt + Left` / `Right`** | Inside Alacritty | Move active typing focus between left & right panes |
 | **`Alt + Up` / `Down`** | Inside Alacritty | Move active typing focus between top & bottom panes |
+| **`Alt + Shift + Left` / `Right`** | Inside Alacritty | Swap active pane position with left / right neighbor |
+| **`Alt + Shift + Up` / `Down`** | Inside Alacritty | Swap active pane position with top / bottom neighbor |
+| **`Alt + Shift + Space`** | Inside Alacritty | Rotate all terminal pane positions cyclically clockwise |
+| **`Alt + Ctrl + R`** | Inside Alacritty | Instant in-process script reload (development & config refresh) |
 
 ---
 
