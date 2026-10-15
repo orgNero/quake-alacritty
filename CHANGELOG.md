@@ -32,6 +32,31 @@ _None_
 
 ---
 
+## [0.3.2] - 2026-10-15
+
+## Features
+### Major
+_None_
+### Minor
+_None_
+
+## Fixes
+### Major
+_None_
+### Minor
+- **Cold-Start Visor Focus (`Win + §`)**: Automatically shift keyboard typing focus via `WinActivate` to the newly launched Alacritty terminal on initial cold start, preventing focus from remaining on background desktop applications.
+
+## Window Management & Multi-Monitor
+- **Adaptive Cold-Start Polling**: Extended initial window appearance polling in `ToggleVisor()` to accommodate GPU context initialization during fresh process launch before asserting window focus.
+
+## Styling & Appearance
+_None_
+
+## Configuration & Tooling
+_None_
+
+---
+
 ## [0.3.1] - 2026-10-15
 
 ## Features
