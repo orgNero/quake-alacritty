@@ -27,6 +27,7 @@ Features mouse-aware multi-monitor detection, dynamic 2×2 quad grid tiling, acr
 * **Auto-Rebalancing (`Alt + W`):** Closing any terminal automatically collapses and re-tiles the remaining ones.
 * **Keyboard Pane Navigation (`Alt + Arrows`):** Hop typing focus between splits without touching the mouse.
 * **Window Swapping & Rotation (`Alt + Shift + Arrows`, `Alt + Shift + Space`):** Rearrange panes on the fly by swapping with adjacent windows or rotating all positions cyclically without losing keyboard focus.
+* **First-Run Welcome Banner & Cheat Sheet (`quake-help`):** On the first toggle cold-start, greets you with an in-buffer ANSI quickstart cheat sheet formatted in theme-matching electric cyan. The cheat sheet remains in scrollback for easy reference while learning shortcuts and can be redisplayed anytime by running `quake-help`.
 * **Taskbar Awareness:** Respects custom work areas (such as left-docked taskbars) using `MonitorGetWorkArea`.
 
 ---
@@ -79,7 +80,7 @@ Run PowerShell from inside the repository folder:
 ```
 
 ### Option B: Manual Setup
-1. Copy `alacritty.toml`, `quake_alacritty.ahk`, and `config.ini` to your configuration folder:
+1. Copy `alacritty.toml`, `quake_alacritty.ahk`, `config.ini`, and `welcome.ps1` to your configuration folder:
    ```
    C:\Users\<YourUsername>\AppData\Roaming\alacritty\
    ```
