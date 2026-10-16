@@ -42,7 +42,7 @@ if (-not (Test-Path $TargetDir)) {
     New-Item -ItemType Directory -Path $TargetDir -Force | Out-Null
 }
 
-$filesToDeploy = @("quake_alacritty.ahk", "alacritty.toml", "config.ini")
+$filesToDeploy = @("quake_alacritty.ahk", "alacritty.toml", "config.ini", "welcome.ps1")
 foreach ($file in $filesToDeploy) {
     $src = Join-Path $SourceDir $file
     $dst = Join-Path $TargetDir $file
@@ -78,7 +78,19 @@ if ($CreateStartupShortcut -or (-not (Test-Path $shortcutPath))) {
     Write-Host "  Created startup shortcut: $shortcutPath" -ForegroundColor Green
 }
 
-# 4. Restart running script
+# 4. Optional: Register 'quake-help' in PowerShell profile
+if (Test-Path $PROFILE) {
+    try {
+        $profileContent = Get-Content $PROFILE -Raw -ErrorAction SilentlyContinue
+        if ($profileContent -notmatch 'quake-help') {
+            $welcomePath = Join-Path $TargetDir "welcome.ps1"
+            Add-Content -Path $PROFILE -Value "`n# Quake Alacritty Cheat Sheet`nfunction quake-help { & `"$welcomePath`" }"
+            Write-Host "  [Profile] Registered 'quake-help' in `$PROFILE" -ForegroundColor Green
+        }
+    } catch {}
+}
+
+# 5. Restart running script
 Write-Host "`n🔄 Starting AutoHotkey script..." -ForegroundColor Yellow
 Get-Process AutoHotkey64 -ErrorAction SilentlyContinue | Where-Object {
     $_.MainWindowTitle -like "*quake_alacritty*" -or $_.CommandLine -like "*quake_alacritty*"
