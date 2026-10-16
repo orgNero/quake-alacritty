@@ -585,9 +585,32 @@ RotateWindows(clockwise := true)
 ; Window Management Actions
 ; -------------------------------------------------------------
 
+; Helper: Resolves the default shell executable configured in alacritty.toml
+GetDefaultShell()
+{
+    appDataToml := EnvGet("APPDATA") . "\alacritty\alacritty.toml"
+    localToml   := A_ScriptDir . "\alacritty.toml"
+    tomlPath := FileExist(appDataToml) ? appDataToml : (FileExist(localToml) ? localToml : "")
+
+    if (tomlPath != "")
+    {
+        try {
+            content := FileRead(tomlPath)
+            if RegExMatch(content, 'i)program\s*=\s*"([^"]+)"', &m)
+            {
+                prog := m[1]
+                if (InStr(prog, "pwsh") || InStr(prog, "powershell"))
+                    return prog
+            }
+        }
+    }
+    return "powershell.exe"
+}
+
 ; Toggles the terminal visor on the display containing the mouse cursor
 ToggleVisor()
 {
+    global g_FirstRun, g_ConfigFile
     DetectHiddenWindows true
     windows := GetAlacrittyWindows()
 
@@ -597,7 +620,35 @@ ToggleVisor()
     ; If none are running, launch the first one
     if (windows.Length == 0)
     {
-        Run("alacritty.exe")
+        if (g_FirstRun)
+        {
+            welcomeScript := ""
+            if FileExist(A_ScriptDir . "\welcome.ps1")
+                welcomeScript := A_ScriptDir . "\welcome.ps1"
+            else if FileExist(EnvGet("APPDATA") . "\alacritty\welcome.ps1")
+                welcomeScript := EnvGet("APPDATA") . "\alacritty\welcome.ps1"
+
+            if (welcomeScript != "")
+            {
+                shellProg := GetDefaultShell()
+                Run(Format('alacritty.exe -e {1} -NoLogo -NoExit -ExecutionPolicy Bypass -File "{2}"', shellProg, welcomeScript))
+            }
+            else
+            {
+                Run("alacritty.exe")
+            }
+
+            ; Mark first run complete and persist to config.ini
+            g_FirstRun := false
+            if (g_ConfigFile != "" && FileExist(g_ConfigFile))
+            {
+                try IniWrite("false", g_ConfigFile, "General", "FirstRun")
+            }
+        }
+        else
+        {
+            Run("alacritty.exe")
+        }
         firstHwnd := 0
         ; Adaptive polling: tile immediately once window appears (up to 1.5s cold start)
         Loop 75 {
