@@ -64,7 +64,7 @@ When discussing, proposing, or adding items to the backlog, strictly adhere to t
 - **Windows 11 & Multi-Monitor Awareness**: Always account for DPI scaling (`-DPIScale`), secondary monitor coordinates (which can have negative X/Y coordinates), and custom taskbar positions (`MonitorGetWorkArea`).
 - **Click-Through Borders**: Visual border guides must remain transparent to mouse clicks (`+E0x20` / `WS_EX_TRANSPARENT`) so terminal interaction is never intercepted.
 - **Encountered Bugs & Gotchas**: Always consult [`docs/BUGS_AND_GOTCHAS.md`](docs/BUGS_AND_GOTCHAS.md) before modifying window discovery (`GetAlacrittyWindows`), Z-order tracking (`SyncWindowOrder`), coordinate math, or DPI scaling to avoid reintroducing known OS-level regressions.
-- **Git & Commits**: Conventional Commits (`feat:`, `fix:`, `docs:`, `refactor:`, `chore:`). Never force-push or amend without user confirmation. Do not push to remote unless explicitly instructed.
+- **Git & Commits**: Strictly adhere to global Conventional Commits and push safety guardrails.
 
 ---
 

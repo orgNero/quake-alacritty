@@ -8,7 +8,7 @@ Features mouse-aware multi-monitor detection, dynamic 2×2 quad grid tiling, acr
 
 ## 📸 Preview
 
-![Quake Alacritty Demo](assets/preview.png)
+![Quake Alacritty Demo](assets/quake_alacritty_preview.gif)
 
 ---
 
