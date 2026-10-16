@@ -32,6 +32,33 @@ _None_
 
 ---
 
+## [0.4.0] - 2026-10-16
+
+## Features
+### Major
+- **In-Terminal First-Run Welcome Banner (`welcome.ps1`)**: Renders a persistent ANSI quickstart cheat sheet directly inside the initial terminal buffer on cold start when `FirstRun=true` in `config.ini`, replacing transient OS notifications.
+### Minor
+- **Session & Profile Help Command (`quake-help`)**: Introduced `quake-help` command in PowerShell sessions allowing users to redisplay the quickstart cheat sheet anytime on demand.
+- **Dynamic Hotkey Introspection**: The welcome cheat sheet dynamically parses `config.ini` to display custom user keybindings with clean human-readable labels.
+
+## Fixes
+### Major
+_None_
+### Minor
+_None_
+
+## Window Management & Multi-Monitor
+- **First-Run Cold Start Launch Hook**: Integrated banner invocation into `ToggleVisor()` when `windows.Length == 0` and `g_FirstRun == true`, automatically writing `FirstRun=false` to `config.ini` so subsequent splits and future visor toggles spawn standard shells.
+- **Shell Resolution (`GetDefaultShell`)**: Added automatic detection of configured shell in `alacritty.toml` to support `pwsh.exe` and `powershell.exe` with `-NoLogo -NoExit -ExecutionPolicy Bypass`.
+
+## Styling & Appearance
+- **Electric Cyan ANSI Theming**: Designed the cheat sheet using Unicode box-drawing borders and electric cyan (`#38bdf8`) ANSI color sequences aligned with Quake Alacritty's seam divider theme.
+
+## Configuration & Tooling
+- **Automated Deployment & Profile Integration (`install.ps1`)**: Updated `install.ps1` to deploy `welcome.ps1` to `%APPDATA%\alacritty\` and register the `quake-help` helper function in the user's PowerShell `$PROFILE`.
+
+---
+
 ## [0.3.2] - 2026-10-15
 
 ## Features
