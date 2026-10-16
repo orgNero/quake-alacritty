@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Installs and configures Quake Alacritty Terminal with AutoHotkey v2.
 #>
