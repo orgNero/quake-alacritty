@@ -16,11 +16,17 @@ global g_VisorHeightPercent := 0.40
 global g_MultiMonitorMode   := "hopping"
 global g_FirstRun           := false
 
+; Layout settings
+global g_TileLayout         := "bottom"
+global g_TwoPaneLayout      := "side-by-side-visor"
+global g_SinglePaneSide     := ""
+
 ; Hotkey mappings (defaults if config is absent or partial)
 global g_KeyToggleVisor     := "#sc029"
 global g_KeySplit           := "!Enter"
 global g_KeyClose           := "!w"
 global g_KeyRetile          := "!r"
+global g_KeyCycleLayout     := "!l"
 global g_KeyFocusLeft       := "!Left"
 global g_KeyFocusRight      := "!Right"
 global g_KeyFocusUp         := "!Up"
@@ -40,6 +46,7 @@ global g_Dividers           := []
 LoadConfig()
 {
     global g_ConfigFile, g_BorderGap, g_BorderColor, g_VisorHeightPercent, g_MultiMonitorMode, g_FirstRun
+    global g_TileLayout, g_TwoPaneLayout, g_KeyCycleLayout
     global g_KeyToggleVisor, g_KeySplit, g_KeyClose, g_KeyRetile
     global g_KeyFocusLeft, g_KeyFocusRight, g_KeyFocusUp, g_KeyFocusDown
     global g_KeySwapLeft, g_KeySwapRight, g_KeySwapUp, g_KeySwapDown
@@ -79,6 +86,14 @@ LoadConfig()
         vhVal := Integer(IniRead(g_ConfigFile, "Appearance", "VisorHeightPercent", "40"))
         if (vhVal >= 10 && vhVal <= 100)
             g_VisorHeightPercent := vhVal / 100.0
+
+        tlVal := Trim(StrLower(IniRead(g_ConfigFile, "Appearance", "TileLayout", "bottom")))
+        if (tlVal == "bottom" || tlVal == "top" || tlVal == "left" || tlVal == "right")
+            g_TileLayout := tlVal
+
+        tpVal := Trim(StrLower(IniRead(g_ConfigFile, "Appearance", "TwoPaneLayout", "side-by-side-visor")))
+        if (tpVal == "side-by-side-visor" || tpVal == "side-by-side-full" || tpVal == "left-stacked" || tpVal == "right-stacked")
+            g_TwoPaneLayout := tpVal
     }
 
     ; 4. [Hotkeys]
@@ -87,6 +102,7 @@ LoadConfig()
         g_KeySplit       := IniRead(g_ConfigFile, "Hotkeys", "SplitWindow", g_KeySplit)
         g_KeyClose       := IniRead(g_ConfigFile, "Hotkeys", "CloseWindow", g_KeyClose)
         g_KeyRetile      := IniRead(g_ConfigFile, "Hotkeys", "Retile", g_KeyRetile)
+        g_KeyCycleLayout := IniRead(g_ConfigFile, "Hotkeys", "CycleLayout", g_KeyCycleLayout)
         g_KeyFocusLeft   := IniRead(g_ConfigFile, "Hotkeys", "FocusLeft", g_KeyFocusLeft)
         g_KeyFocusRight  := IniRead(g_ConfigFile, "Hotkeys", "FocusRight", g_KeyFocusRight)
         g_KeyFocusUp     := IniRead(g_ConfigFile, "Hotkeys", "FocusUp", g_KeyFocusUp)
@@ -115,19 +131,20 @@ RegisterHotkeys()
     ; Context-sensitive hotkeys inside Alacritty
     HotIfWinActive("ahk_exe alacritty.exe")
 
-    RegisterKey(g_KeySplit,      (*) => SpawnSplit())
-    RegisterKey(g_KeyClose,      (*) => CloseSplit())
-    RegisterKey(g_KeyRetile,     (*) => TileAlacritty())
-    RegisterKey(g_KeyFocusLeft,  (*) => FocusDirection("left"))
-    RegisterKey(g_KeyFocusRight, (*) => FocusDirection("right"))
-    RegisterKey(g_KeyFocusUp,    (*) => FocusDirection("up"))
-    RegisterKey(g_KeyFocusDown,  (*) => FocusDirection("down"))
-    RegisterKey(g_KeySwapLeft,   (*) => SwapDirection("left"))
-    RegisterKey(g_KeySwapRight,  (*) => SwapDirection("right"))
-    RegisterKey(g_KeySwapUp,     (*) => SwapDirection("up"))
-    RegisterKey(g_KeySwapDown,   (*) => SwapDirection("down"))
-    RegisterKey(g_KeyRotate,     (*) => RotateWindows())
-    RegisterKey(g_KeyReload,     (*) => Reload())
+    RegisterKey(g_KeySplit,       (*) => SpawnSplit())
+    RegisterKey(g_KeyClose,       (*) => CloseSplit())
+    RegisterKey(g_KeyRetile,      (*) => TileAlacritty())
+    RegisterKey(g_KeyCycleLayout, (*) => CycleLayout())
+    RegisterKey(g_KeyFocusLeft,   (*) => FocusDirection("left"))
+    RegisterKey(g_KeyFocusRight,  (*) => FocusDirection("right"))
+    RegisterKey(g_KeyFocusUp,     (*) => FocusDirection("up"))
+    RegisterKey(g_KeyFocusDown,   (*) => FocusDirection("down"))
+    RegisterKey(g_KeySwapLeft,    (*) => SwapDirection("left"))
+    RegisterKey(g_KeySwapRight,   (*) => SwapDirection("right"))
+    RegisterKey(g_KeySwapUp,      (*) => SwapDirection("up"))
+    RegisterKey(g_KeySwapDown,    (*) => SwapDirection("down"))
+    RegisterKey(g_KeyRotate,      (*) => RotateWindows())
+    RegisterKey(g_KeyReload,      (*) => Reload())
 
     HotIfWinActive()
 }
@@ -296,12 +313,13 @@ GetMouseMonitor()
 }
 
 ; Helper: Tiles Alacritty windows dynamically:
-; 1 window:  Top 100% width, 40% height (borderless)
-; 2 windows: Top 50% / 50% width, 40% height (vertical cyan seam)
-; 3 windows: Top 50% / 50% width, Bottom 100% width (T-split cyan seams)
+; 1 window:  Top 100% width, 40% height (or 50% width full-height if positioned left/right)
+; 2 windows: Configurable 2-pane mode (side-by-side visor/full, left-stacked, right-stacked)
+; 3 windows: 4-cardinal master orientations (bottom, top, left, right)
 ; 4 windows: Top 50% / 50% width, Bottom 50% / 50% width (2x2 Quad, cyan cross seams)
 TileAlacritty(targetMon := 0)
 {
+    global g_BorderGap, g_BorderColor, g_VisorHeightPercent, g_TileLayout, g_TwoPaneLayout, g_SinglePaneSide
     DetectHiddenWindows true
     realWindows := GetAlacrittyWindows()
     count := realWindows.Length
@@ -345,33 +363,216 @@ TileAlacritty(targetMon := 0)
     MonitorGetWorkArea(targetMon, &wLeft, &wTop, &wRight, &wBottom)
     totalWidth  := wRight - wLeft
     totalHeight := wBottom - wTop
+    gap         := (count > 1) ? g_BorderGap : 0
 
-    ; Row distribution:
-    ; 1-2 windows: all on top row
-    ; 3 windows: 2 top, 1 bottom
-    ; 4 windows: 2 top, 2 bottom
-    topCount := (count <= 2) ? count : Ceil(count / 2)
+    ; -------------------------------------------------------------
+    ; Case 1: Exactly 1 window
+    ; -------------------------------------------------------------
+    if (count == 1)
+    {
+        hwnd := windows[1]
+        if (g_SinglePaneSide == "left")
+        {
+            thisW := Floor((totalWidth - gap) / 2)
+            WinMove(wLeft, wTop, thisW, totalHeight, "ahk_id " hwnd)
+        }
+        else if (g_SinglePaneSide == "right")
+        {
+            thisW := Floor((totalWidth - gap) / 2)
+            currentX := wLeft + totalWidth - thisW
+            WinMove(currentX, wTop, thisW, totalHeight, "ahk_id " hwnd)
+        }
+        else
+        {
+            topHeight := Floor(totalHeight * g_VisorHeightPercent)
+            WinMove(wLeft, wTop, totalWidth, topHeight, "ahk_id " hwnd)
+        }
+        return
+    }
+
+    ; -------------------------------------------------------------
+    ; Case 2: Exactly 2 windows
+    ; -------------------------------------------------------------
+    if (count == 2)
+    {
+        if (g_TwoPaneLayout == "left-stacked")
+        {
+            colW := Floor((totalWidth - gap) / 2)
+            availHeight := totalHeight - gap
+            h1 := Floor(availHeight / 2)
+            h2 := availHeight - h1
+
+            WinMove(wLeft, wTop, colW, h1, "ahk_id " windows[1])
+            if (gap > 0)
+                CreateDivider(wLeft, wTop + h1, colW, gap, g_BorderColor)
+            WinMove(wLeft, wTop + h1 + gap, colW, h2, "ahk_id " windows[2])
+        }
+        else if (g_TwoPaneLayout == "right-stacked")
+        {
+            colW := Floor((totalWidth - gap) / 2)
+            leftX := wLeft + totalWidth - colW
+            availHeight := totalHeight - gap
+            h1 := Floor(availHeight / 2)
+            h2 := availHeight - h1
+
+            WinMove(leftX, wTop, colW, h1, "ahk_id " windows[1])
+            if (gap > 0)
+                CreateDivider(leftX, wTop + h1, colW, gap, g_BorderColor)
+            WinMove(leftX, wTop + h1 + gap, colW, h2, "ahk_id " windows[2])
+        }
+        else ; "side-by-side-visor" or "side-by-side-full"
+        {
+            paneHeight := (g_TwoPaneLayout == "side-by-side-full") ? totalHeight : Floor(totalHeight * g_VisorHeightPercent)
+            availWidth := totalWidth - gap
+            col1W := Floor(availWidth / 2)
+            col2W := availWidth - col1W
+
+            WinMove(wLeft, wTop, col1W, paneHeight, "ahk_id " windows[1])
+            if (gap > 0)
+                CreateDivider(wLeft + col1W, wTop, gap, paneHeight, g_BorderColor)
+            WinMove(wLeft + col1W + gap, wTop, col2W, paneHeight, "ahk_id " windows[2])
+        }
+        return
+    }
+
+    ; -------------------------------------------------------------
+    ; Case 3: Exactly 3 windows (4 Cardinal Master Orientations)
+    ; -------------------------------------------------------------
+    if (count == 3)
+    {
+        if (g_TileLayout == "top")
+        {
+            ; Top-Master: 1 top pane (100% width), 2 bottom panes (50%/50% width)
+            availHeight := totalHeight - gap
+            topHeight   := Floor(availHeight / 2)
+            botHeight   := availHeight - topHeight
+            botY        := wTop + topHeight + gap
+
+            availWidth  := totalWidth - gap
+            bot1W       := Floor(availWidth / 2)
+            bot2W       := availWidth - bot1W
+
+            ; Window 1: Top Master
+            WinMove(wLeft, wTop, totalWidth, topHeight, "ahk_id " windows[1])
+
+            ; Full-width horizontal divider
+            if (gap > 0)
+                CreateDivider(wLeft, wTop + topHeight, totalWidth, gap, g_BorderColor)
+
+            ; Window 2: Bottom-Left
+            WinMove(wLeft, botY, bot1W, botHeight, "ahk_id " windows[2])
+
+            ; Bottom vertical divider
+            if (gap > 0)
+                CreateDivider(wLeft + bot1W, botY, gap, botHeight, g_BorderColor)
+
+            ; Window 3: Bottom-Right
+            WinMove(wLeft + bot1W + gap, botY, bot2W, botHeight, "ahk_id " windows[3])
+        }
+        else if (g_TileLayout == "left")
+        {
+            ; Left-Master: Left pane 100% height, Right column 2 stacked panes
+            availWidth  := totalWidth - gap
+            masterWidth := Floor(availWidth / 2)
+            rightWidth  := availWidth - masterWidth
+            rightX      := wLeft + masterWidth + gap
+
+            availHeight := totalHeight - gap
+            h1          := Floor(availHeight / 2)
+            h2          := availHeight - h1
+
+            ; Window 1: Left Master (100% height)
+            WinMove(wLeft, wTop, masterWidth, totalHeight, "ahk_id " windows[1])
+
+            ; Full-height vertical divider
+            if (gap > 0)
+                CreateDivider(wLeft + masterWidth, wTop, gap, totalHeight, g_BorderColor)
+
+            ; Window 2: Top-Right
+            WinMove(rightX, wTop, rightWidth, h1, "ahk_id " windows[2])
+
+            ; Horizontal divider in right column
+            if (gap > 0)
+                CreateDivider(rightX, wTop + h1, rightWidth, gap, g_BorderColor)
+
+            ; Window 3: Bottom-Right
+            WinMove(rightX, wTop + h1 + gap, rightWidth, h2, "ahk_id " windows[3])
+        }
+        else if (g_TileLayout == "right")
+        {
+            ; Right-Master: Right pane 100% height, Left column 2 stacked panes
+            ; Reading order: [1: Top-Left, 2: Right-Master, 3: Bottom-Left]
+            availWidth  := totalWidth - gap
+            leftWidth   := Floor(availWidth / 2)
+            masterWidth := availWidth - leftWidth
+            rightX      := wLeft + leftWidth + gap
+
+            availHeight := totalHeight - gap
+            h1          := Floor(availHeight / 2)
+            h2          := availHeight - h1
+
+            ; Window 1: Top-Left
+            WinMove(wLeft, wTop, leftWidth, h1, "ahk_id " windows[1])
+
+            ; Horizontal divider in left column
+            if (gap > 0)
+                CreateDivider(wLeft, wTop + h1, leftWidth, gap, g_BorderColor)
+
+            ; Window 3: Bottom-Left
+            WinMove(wLeft, wTop + h1 + gap, leftWidth, h2, "ahk_id " windows[3])
+
+            ; Full-height vertical divider
+            if (gap > 0)
+                CreateDivider(wLeft + leftWidth, wTop, gap, totalHeight, g_BorderColor)
+
+            ; Window 2: Right Master (100% height)
+            WinMove(rightX, wTop, masterWidth, totalHeight, "ahk_id " windows[2])
+        }
+        else ; "bottom" (default)
+        {
+            ; Bottom-Master: 2 top panes (50%/50% width), 1 bottom master pane (100% width)
+            availHeight := totalHeight - gap
+            topHeight   := Floor(availHeight / 2)
+            botHeight   := availHeight - topHeight
+            botY        := wTop + topHeight + gap
+
+            availWidth  := totalWidth - gap
+            top1W       := Floor(availWidth / 2)
+            top2W       := availWidth - top1W
+
+            ; Window 1: Top-Left
+            WinMove(wLeft, wTop, top1W, topHeight, "ahk_id " windows[1])
+
+            ; Top vertical divider
+            if (gap > 0)
+                CreateDivider(wLeft + top1W, wTop, gap, topHeight, g_BorderColor)
+
+            ; Window 2: Top-Right
+            WinMove(wLeft + top1W + gap, wTop, top2W, topHeight, "ahk_id " windows[2])
+
+            ; Full-width horizontal divider
+            if (gap > 0)
+                CreateDivider(wLeft, wTop + topHeight, totalWidth, gap, g_BorderColor)
+
+            ; Window 3: Bottom Master (100% width)
+            WinMove(wLeft, botY, totalWidth, botHeight, "ahk_id " windows[3])
+        }
+        return
+    }
+
+    ; -------------------------------------------------------------
+    ; Case 4: 4 windows (2x2 Quad Grid) or general N-window distribution
+    ; -------------------------------------------------------------
+    topCount := Ceil(count / 2)
     botCount := count - topCount
 
-    ; Height distribution:
-    ; 40% visor when only top row exists; 50/50 split (minus gap) when bottom row is filled
-    gap := (count > 1) ? g_BorderGap : 0
-    if (botCount == 0)
-    {
-        topHeight := Floor(totalHeight * g_VisorHeightPercent)
-        botHeight := 0
-        botY      := 0
-    }
-    else
-    {
-        availHeight := totalHeight - gap
-        topHeight   := Floor(availHeight / 2)
-        botHeight   := availHeight - topHeight
-        botY        := wTop + topHeight + gap
-    }
+    availHeight := totalHeight - gap
+    topHeight   := Floor(availHeight / 2)
+    botHeight   := availHeight - topHeight
+    botY        := wTop + topHeight + gap
 
     ; 3. Tile Top Row (with vertical dividers between adjacent windows)
-    topAvailWidth := totalWidth - ((topCount - 1) * gap)
+    topAvailWidth   := totalWidth - ((topCount - 1) * gap)
     baseTopColWidth := Floor(topAvailWidth / topCount)
     currentX := wLeft
     Loop topCount {
@@ -395,7 +596,7 @@ TileAlacritty(targetMon := 0)
         if (gap > 0)
             CreateDivider(wLeft, wTop + topHeight, totalWidth, gap, g_BorderColor)
 
-        botAvailWidth := totalWidth - ((botCount - 1) * gap)
+        botAvailWidth   := totalWidth - ((botCount - 1) * gap)
         baseBotColWidth := Floor(botAvailWidth / botCount)
         currentX := wLeft
         Loop botCount {
@@ -431,6 +632,8 @@ FocusDirection(dir)
 
     bestHwnd := 0
     bestDist := 99999999
+    bestTcx  := 0
+    bestTcy  := 0
 
     for hwnd in realWindows
     {
@@ -454,10 +657,26 @@ FocusDirection(dir)
         if (valid)
         {
             dist := (tcx - acx)**2 + (tcy - acy)**2
-            if (dist < bestDist)
+            ; Tie-breaking for equidistant targets (e.g. Master pane navigating to 2 stacked panes):
+            ; For horizontal navigation (left/right), prefer higher up (smaller tcy).
+            ; For vertical navigation (up/down), prefer further left (smaller tcx).
+            isBetter := false
+            if (dist < bestDist - 100)
+                isBetter := true
+            else if (Abs(dist - bestDist) <= 100)
+            {
+                if (dir == "left" || dir == "right")
+                    isBetter := (tcy < bestTcy)
+                else
+                    isBetter := (tcx < bestTcx)
+            }
+
+            if (isBetter)
             {
                 bestDist := dist
                 bestHwnd := hwnd
+                bestTcx  := tcx
+                bestTcy  := tcy
             }
         }
     }
@@ -487,6 +706,8 @@ SwapDirection(dir)
 
     bestHwnd := 0
     bestDist := 99999999
+    bestTcx  := 0
+    bestTcy  := 0
 
     for hwnd in realWindows
     {
@@ -512,10 +733,23 @@ SwapDirection(dir)
             dist := (tcx - acx)**2 + (tcy - acy)**2
             ; Tie-breaker: If distances are almost equal (within 100px difference),
             ; prefer the window further to the left (smaller tcx) or higher up (smaller tcy)
-            if (dist < bestDist - 100 || (Abs(dist - bestDist) <= 100 && tcx < acx))
+            isBetter := false
+            if (dist < bestDist - 100)
+                isBetter := true
+            else if (Abs(dist - bestDist) <= 100)
+            {
+                if (dir == "left" || dir == "right")
+                    isBetter := (tcy < bestTcy)
+                else
+                    isBetter := (tcx < bestTcx)
+            }
+
+            if (isBetter)
             {
                 bestDist := dist
                 bestHwnd := hwnd
+                bestTcx  := tcx
+                bestTcy  := tcy
             }
         }
     }
@@ -577,6 +811,56 @@ RotateWindows(clockwise := true)
 
     TileAlacritty()
     if (activeHwnd)
+        WinActivate("ahk_id " activeHwnd)
+}
+
+; Helper: Cycles multi-pane terminal layouts live without editing config.ini
+CycleLayout()
+{
+    global g_TileLayout, g_TwoPaneLayout, g_SinglePaneSide
+    activeHwnd := WinActive("A")
+    realWindows := GetAlacrittyWindows()
+    count := realWindows.Length
+
+    if (count == 1)
+    {
+        ; Cycle single-pane: full-width visor -> left-half full-height -> right-half full-height -> full-width visor
+        if (g_SinglePaneSide == "")
+            g_SinglePaneSide := "left"
+        else if (g_SinglePaneSide == "left")
+            g_SinglePaneSide := "right"
+        else
+            g_SinglePaneSide := ""
+    }
+    else if (count == 2)
+    {
+        ; Cycle 2-pane modes: side-by-side-visor -> side-by-side-full -> left-stacked -> right-stacked -> side-by-side-visor
+        if (g_TwoPaneLayout == "side-by-side-visor")
+            g_TwoPaneLayout := "side-by-side-full"
+        else if (g_TwoPaneLayout == "side-by-side-full")
+            g_TwoPaneLayout := "left-stacked"
+        else if (g_TwoPaneLayout == "left-stacked")
+            g_TwoPaneLayout := "right-stacked"
+        else
+            g_TwoPaneLayout := "side-by-side-visor"
+
+        g_SinglePaneSide := (g_TwoPaneLayout == "left-stacked") ? "left" : ((g_TwoPaneLayout == "right-stacked") ? "right" : "")
+    }
+    else if (count == 3)
+    {
+        ; Cycle 3-pane master orientations: bottom -> top -> left -> right -> bottom
+        if (g_TileLayout == "bottom")
+            g_TileLayout := "top"
+        else if (g_TileLayout == "top")
+            g_TileLayout := "left"
+        else if (g_TileLayout == "left")
+            g_TileLayout := "right"
+        else
+            g_TileLayout := "bottom"
+    }
+
+    TileAlacritty()
+    if (activeHwnd && WinExist("ahk_id " activeHwnd))
         WinActivate("ahk_id " activeHwnd)
 }
 
@@ -711,7 +995,7 @@ ToggleVisor()
 ; Spawns a new split terminal, dynamically re-tiles into grid, and shifts focus to the new split
 SpawnSplit()
 {
-    global g_AlacrittyOrder
+    global g_AlacrittyOrder, g_TwoPaneLayout, g_TileLayout, g_SinglePaneSide
     oldWindows := GetAlacrittyWindows()
     oldCount := oldWindows.Length
     Run("alacritty.exe")
@@ -744,6 +1028,42 @@ SpawnSplit()
         }
     }
 
+    ; Handle dynamic transitions:
+    if (oldCount == 1 && newHwnd)
+    {
+        ; 1 -> 2 panes:
+        if (g_SinglePaneSide == "left")
+        {
+            g_TwoPaneLayout := "left-stacked"
+            g_SinglePaneSide := ""
+        }
+        else if (g_SinglePaneSide == "right")
+        {
+            g_TwoPaneLayout := "right-stacked"
+            g_SinglePaneSide := ""
+        }
+    }
+    else if (oldCount == 2 && newHwnd)
+    {
+        ; 2 -> 3 panes:
+        if (g_TwoPaneLayout == "left-stacked")
+        {
+            g_TileLayout := "right"
+            ; In right master mode: [1: Top-Left, 2: Right-Master, 3: Bottom-Left]
+            ; Ensure old windows remain in their slots and new window becomes Right-Master
+            if (oldWindows.Length >= 2)
+                g_AlacrittyOrder := [oldWindows[1], newHwnd, oldWindows[2]]
+        }
+        else if (g_TwoPaneLayout == "right-stacked")
+        {
+            g_TileLayout := "left"
+            ; In left master mode: [1: Left-Master, 2: Top-Right, 3: Bottom-Right]
+            ; New window becomes Left-Master, old windows remain Top-Right and Bottom-Right
+            if (oldWindows.Length >= 2)
+                g_AlacrittyOrder := [newHwnd, oldWindows[1], oldWindows[2]]
+        }
+    }
+
     TileAlacritty()
 
     ; Shift keyboard typing focus to the newly created split terminal
@@ -756,7 +1076,11 @@ SpawnSplit()
 ; Closes focused window and auto-rebalances remaining windows
 CloseSplit()
 {
+    global g_TwoPaneLayout, g_TileLayout, g_SinglePaneSide
     activeHwnd := WinActive("A")
+    oldWindows := GetAlacrittyWindows()
+    oldCount := oldWindows.Length
+
     WinClose("ahk_id " activeHwnd)
     ; Adaptive polling: re-tile immediately once window closes (up to 200ms max)
     Loop 20 {
@@ -764,5 +1088,27 @@ CloseSplit()
         if (!WinExist("ahk_id " activeHwnd))
             break
     }
+
+    ; Handle dynamic transitions when closing panes:
+    if (oldCount == 2)
+    {
+        ; 2 -> 1 pane:
+        ; When closing a pane from left-stacked or right-stacked, remaining terminal stays on its half
+        if (g_TwoPaneLayout == "left-stacked")
+            g_SinglePaneSide := "left"
+        else if (g_TwoPaneLayout == "right-stacked")
+            g_SinglePaneSide := "right"
+        else
+            g_SinglePaneSide := ""
+    }
+    else if (oldCount == 3)
+    {
+        ; 3 -> 2 panes:
+        if (g_TileLayout == "right")
+            g_TwoPaneLayout := "left-stacked"
+        else if (g_TileLayout == "left")
+            g_TwoPaneLayout := "right-stacked"
+    }
+
     TileAlacritty()
 }

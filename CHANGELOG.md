@@ -32,6 +32,34 @@ _None_
 
 ---
 
+## [0.5.0] - 2026-10-18
+
+## Features
+### Major
+- **Configurable Multi-Pane Terminal Layouts (`TileLayout` & `TwoPaneLayout`)**: Introduced 4-cardinal 3-pane master orientations (`bottom`, `top`, `left`, `right`) and configurable 2-pane modes (`side-by-side-visor`, `side-by-side-full`, `left-stacked`, `right-stacked`).
+- **Live Layout Cycling (`Alt + L`)**: Added on-the-fly layout cycle shortcut (`CycleLayout=!l`) allowing live toggling between 2-pane modes and 3-pane master orientations without restarting or editing configuration files.
+### Minor
+- **Half-Screen Stacked Workspaces**: Added `left-stacked` and `right-stacked` 2-pane layouts that occupy 50% screen width while leaving the opposite half unobstructed for viewing browser documentation or IDEs.
+- **Cheat Sheet & Banner Integration**: Updated `welcome.ps1` and `quake-help` to include the `Alt + L` layout cycle shortcut.
+
+## Fixes
+### Major
+_None_
+### Minor
+- **Deterministic Directional Tie-Breaking**: Resolved equidistant centroid ambiguity in `FocusDirection` and `SwapDirection` across asymmetrical master layouts (preferring higher panes on horizontal navigation and leftmost panes on vertical navigation).
+
+## Window Management & Multi-Monitor
+- **Dynamic Spawning & Despawning Transitions**: Spawning a 3rd pane (`Alt + Enter`) from `left-stacked` or `right-stacked` expands into the opposite half as a full-height master (`right` or `left` layout). Closing a stacked pane (`Alt + W`) preserves the remaining terminal on its half-screen column (`50%` width, `100%` height) without snapping back to a full-width visor.
+- **Cold-Start Slot Stability**: Aligned spatial `(Y, X)` coordinate reading order in `TileAlacritty()` across all 4 cardinal master orientations so script reloads (`Alt + Ctrl + R`) maintain pane slot stability.
+
+## Styling & Appearance
+- **Clean Half-Screen Boundary Seams**: Configured `CreateDivider` to render only internal divider seams between stacked panes in half-screen modes, avoiding intrusive outer borders against background desktop windows.
+
+## Configuration & Tooling
+- **Configuration Options in `config.ini`**: Added `[Appearance] TileLayout=bottom`, `[Appearance] TwoPaneLayout=side-by-side-visor`, and `[Hotkeys] CycleLayout=!l`.
+
+---
+
 ## [0.4.0] - 2026-10-16
 
 ## Features
