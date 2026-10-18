@@ -44,6 +44,7 @@ function Show-QuakeCheatsheet {
         SplitWindow = "Alt + Enter"
         CloseWindow = "Alt + W"
         Retile      = "Alt + R"
+        CycleLayout = "Alt + L"
         Focus       = "Alt + Arrows"
         Swap        = "Alt + Shift + Arrows"
         RotatePanes = "Alt + Shift + Space"
@@ -67,6 +68,7 @@ function Show-QuakeCheatsheet {
                         'SplitWindow' { $hotkeys.SplitWindow = Convert-AhkKey $v 'Alt + Enter' }
                         'CloseWindow' { $hotkeys.CloseWindow = Convert-AhkKey $v 'Alt + W' }
                         'Retile'      { $hotkeys.Retile      = Convert-AhkKey $v 'Alt + R' }
+                        'CycleLayout' { $hotkeys.CycleLayout = Convert-AhkKey $v 'Alt + L' }
                         'FocusLeft'   {
                             $baseMod = Convert-AhkKey $v 'Alt + Left'
                             $hotkeys.Focus = ($baseMod -replace 'Left', 'Arrows')
@@ -97,6 +99,7 @@ function Show-QuakeCheatsheet {
         @{ Key = $hotkeys.SplitWindow; Action = "Split window (1 -> 2 -> 3 -> 4 quad grid)" },
         @{ Key = $hotkeys.CloseWindow; Action = "Close active split & auto-rebalance" },
         @{ Key = $hotkeys.Retile;      Action = "Force re-tile & seam alignment" },
+        @{ Key = $hotkeys.CycleLayout; Action = "Cycle layout / master orientation" },
         @{ Key = $hotkeys.Focus;       Action = "Switch typing focus between panes" },
         @{ Key = $hotkeys.Swap;        Action = "Swap active pane position" },
         @{ Key = $hotkeys.RotatePanes; Action = "Rotate all panes clockwise" },
