@@ -37,6 +37,8 @@ global g_KeySwapRight       := "!+Right"
 global g_KeySwapUp          := "!+Up"
 global g_KeySwapDown        := "!+Down"
 global g_KeyRotate          := "!+Space"
+global g_KeyMoveVisorLeft   := "#+Left"
+global g_KeyMoveVisorRight  := "#+Right"
 global g_KeyReload          := "!^r"
 
 ; Window & Divider trackers
@@ -59,7 +61,7 @@ LoadConfig()
     global g_KeyToggleVisor, g_KeySplit, g_KeyClose, g_KeyRetile
     global g_KeyFocusLeft, g_KeyFocusRight, g_KeyFocusUp, g_KeyFocusDown
     global g_KeySwapLeft, g_KeySwapRight, g_KeySwapUp, g_KeySwapDown
-    global g_KeyRotate, g_KeyReload
+    global g_KeyRotate, g_KeyMoveVisorLeft, g_KeyMoveVisorRight, g_KeyReload
 
     ; 1. Resolve path (%APPDATA%\alacritty\config.ini or local repository)
     appDataPath := EnvGet("APPDATA") . "\alacritty\config.ini"
@@ -134,7 +136,9 @@ LoadConfig()
         g_KeySwapRight   := IniRead(g_ConfigFile, "Hotkeys", "SwapRight", g_KeySwapRight)
         g_KeySwapUp      := IniRead(g_ConfigFile, "Hotkeys", "SwapUp", g_KeySwapUp)
         g_KeySwapDown    := IniRead(g_ConfigFile, "Hotkeys", "SwapDown", g_KeySwapDown)
-        g_KeyRotate      := IniRead(g_ConfigFile, "Hotkeys", "RotatePanes", g_KeyRotate)
+        g_KeyRotate         := IniRead(g_ConfigFile, "Hotkeys", "RotatePanes", g_KeyRotate)
+        g_KeyMoveVisorLeft  := IniRead(g_ConfigFile, "Hotkeys", "MoveVisorLeft", g_KeyMoveVisorLeft)
+        g_KeyMoveVisorRight := IniRead(g_ConfigFile, "Hotkeys", "MoveVisorRight", g_KeyMoveVisorRight)
         g_KeyReload      := IniRead(g_ConfigFile, "Hotkeys", "ReloadScript", g_KeyReload)
     }
 }
@@ -166,7 +170,9 @@ RegisterHotkeys()
     RegisterKey(g_KeySwapRight,   (*) => SwapDirection("right"))
     RegisterKey(g_KeySwapUp,      (*) => SwapDirection("up"))
     RegisterKey(g_KeySwapDown,    (*) => SwapDirection("down"))
-    RegisterKey(g_KeyRotate,      (*) => RotateWindows())
+    RegisterKey(g_KeyRotate,         (*) => RotateWindows())
+    RegisterKey(g_KeyMoveVisorLeft,  (*) => MoveVisorDirection("left"))
+    RegisterKey(g_KeyMoveVisorRight, (*) => MoveVisorDirection("right"))
     RegisterKey(g_KeyReload,      (*) => Reload())
 
     HotIfWinActive()
@@ -1237,6 +1243,140 @@ RotateWindows(clockwise := true)
         if (activeHwnd && WinExist("ahk_id " activeHwnd))
             WinActivate("ahk_id " activeHwnd)
     }
+}
+
+; Helper: Moves or swaps the active terminal visor to the adjacent physical monitor
+MoveVisorDirection(dir)
+{
+    global g_MultiMonitorMode, g_MonitorWindows
+    global g_MonitorTileLayout, g_MonitorTwoPaneLayout, g_MonitorSinglePaneSide
+    DetectHiddenWindows true
+
+    activeHwnd := WinActive("A")
+    if (!activeHwnd)
+        return
+
+    srcMon := GetWindowMonitor(activeHwnd)
+    if (srcMon == 0)
+        srcMon := GetMouseMonitor()
+
+    monCount := MonitorGetCount()
+    if (monCount < 2)
+        return
+
+    ; 1. Resolve physical horizontal ordering of displays (X-offset)
+    monList := []
+    Loop monCount {
+        MonitorGet(A_Index, &mL, &mT, &mR, &mB)
+        monList.Push({ id: A_Index, left: mL })
+    }
+
+    ; Sort by left coordinate ascending (physical left-to-right)
+    n := monList.Length
+    Loop n - 1 {
+        i := A_Index
+        Loop n - i {
+            j := A_Index
+            if (monList[j].left > monList[j + 1].left)
+            {
+                temp := monList[j]
+                monList[j] := monList[j + 1]
+                monList[j + 1] := temp
+            }
+        }
+    }
+
+    ; 2. Locate current monitor index in physically sorted list
+    curIndex := 0
+    Loop monList.Length {
+        if (monList[A_Index].id == srcMon)
+        {
+            curIndex := A_Index
+            break
+        }
+    }
+    if (curIndex == 0)
+        return
+
+    ; 3. Determine target monitor with boundary clamping (no-op at edges)
+    targetIndex := (dir == "left") ? (curIndex - 1) : (curIndex + 1)
+    if (targetIndex < 1 || targetIndex > monList.Length)
+        return
+
+    dstMon := monList[targetIndex].id
+
+    ; 4. Hopping mode: single roaming pool moves directly to dstMon
+    if (g_MultiMonitorMode == "hopping")
+    {
+        TileAlacritty(dstMon)
+        if (WinExist("ahk_id " activeHwnd))
+            WinActivate("ahk_id " activeHwnd)
+        return
+    }
+
+    ; 5. Isolated mode: swap/relocate window workspaces between srcMon and dstMon
+    SyncMonitorWindows(srcMon)
+    SyncMonitorWindows(dstMon)
+
+    if (!g_MonitorWindows.Has(srcMon))
+        g_MonitorWindows[srcMon] := []
+    if (!g_MonitorWindows.Has(dstMon))
+        g_MonitorWindows[dstMon] := []
+
+    srcWindows := g_MonitorWindows[srcMon]
+    dstWindows := g_MonitorWindows[dstMon]
+
+    if (srcWindows.Length == 0)
+        return
+
+    dstWasVisible := IsMonitorVisible(dstMon)
+
+    ; Swap window arrays
+    g_MonitorWindows[dstMon] := srcWindows
+    g_MonitorWindows[srcMon] := dstWindows
+
+    ; Swap layout configurations between monitors
+    srcTile := GetMonTileLayout(srcMon)
+    srcTwo  := GetMonTwoPaneLayout(srcMon)
+    srcSide := GetMonSinglePaneSide(srcMon)
+
+    dstTile := GetMonTileLayout(dstMon)
+    dstTwo  := GetMonTwoPaneLayout(dstMon)
+    dstSide := GetMonSinglePaneSide(dstMon)
+
+    g_MonitorTileLayout[dstMon]     := srcTile
+    g_MonitorTwoPaneLayout[dstMon]  := srcTwo
+    g_MonitorSinglePaneSide[dstMon] := srcSide
+
+    g_MonitorTileLayout[srcMon]     := dstTile
+    g_MonitorTwoPaneLayout[srcMon]  := dstTwo
+    g_MonitorSinglePaneSide[srcMon] := dstSide
+
+    ; Re-tile destination monitor with relocated visor
+    TileAlacritty(dstMon)
+
+    ; Re-tile or clear source monitor
+    if (dstWindows.Length > 0)
+    {
+        if (dstWasVisible)
+        {
+            TileAlacritty(srcMon)
+        }
+        else
+        {
+            for hwnd in dstWindows
+                WinHide("ahk_id " hwnd)
+            ClearDividers(srcMon)
+        }
+    }
+    else
+    {
+        ClearDividers(srcMon)
+    }
+
+    ; Restore typing focus to the active window on destination display
+    if (WinExist("ahk_id " activeHwnd))
+        WinActivate("ahk_id " activeHwnd)
 }
 
 ; Helper: Cycles multi-pane terminal layouts live without editing config.ini
