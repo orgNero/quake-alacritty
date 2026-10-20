@@ -13,7 +13,7 @@ function global:Show-QuakeTip {
     $cKey     = $esc + "[1;38;2;56;189;248m"   # Bright Cyan (#38bdf8)
     $cYellow  = $esc + "[38;2;251;191;36m"    # Amber 400
     $cReset   = $esc + "[0m"
-    $chBulb   = [char]::ConvertFromUtf32(0x1F4A1) # 💡
+    $chBulb   = [char]::ConvertFromUtf32(0x1F4A1) # ðŸ’¡
 
     Write-Host ""
     Write-Host ("  " + $cYellow + $chBulb + " " + $cSub + "Tip: Type '" + $cKey + "quake-help" + $cSub + "' to view keyboard shortcuts." + $cReset)
@@ -28,20 +28,20 @@ function global:Show-QuakeCheatsheet {
         if (Test-Path $localConfig) { $configPath = $localConfig }
     }
 
-    $chSection  = [string][char]0x00A7  # §
-    $chBullet   = [string][char]0x2022  # •
-    $chBolt     = [string][char]0x26A1  # ⚡
-    $chBulb     = [char]::ConvertFromUtf32(0x1F4A1) # 💡
+    $chSection  = [string][char]0x00A7  # Â§
+    $chBullet   = [string][char]0x2022  # â€¢
+    $chBolt     = [string][char]0x26A1  # âš¡
+    $chBulb     = [char]::ConvertFromUtf32(0x1F4A1) # ðŸ’¡
 
     # Box-drawing glyphs defined as strings for cross-version string multiplication & encoding safety
-    $chTopLeft  = [string][char]0x250C  # ┌
-    $chHoriz    = [string][char]0x2500  # ─
-    $chTopRight = [string][char]0x2510  # ┐
-    $chVert     = [string][char]0x2502  # │
-    $chTLeft    = [string][char]0x251C  # ├
-    $chTRight   = [string][char]0x2524  # ┤
-    $chBotLeft  = [string][char]0x2514  # └
-    $chBotRight = [string][char]0x2518  # ┘
+    $chTopLeft  = [string][char]0x250C  # â”Œ
+    $chHoriz    = [string][char]0x2500  # â”€
+    $chTopRight = [string][char]0x2510  # â”
+    $chVert     = [string][char]0x2502  # â”‚
+    $chTLeft    = [string][char]0x251C  # â”œ
+    $chTRight   = [string][char]0x2524  # â”¤
+    $chBotLeft  = [string][char]0x2514  # â””
+    $chBotRight = [string][char]0x2518  # â”˜
 
     # Helper: Convert AHK shortcut notation to human-readable label
     function Convert-AhkKey([string]$ahkKey, [string]$defaultLabel) {
@@ -78,7 +78,7 @@ function global:Show-QuakeCheatsheet {
         Focus       = "Alt + Arrows"
         Swap        = "Alt + Shift + Arrows"
         RotatePanes = "Alt + Shift + Space"
-        MoveVisor   = "Win + Shift + Left/Right"
+        MoveVisor   = "Alt + Ctrl + Left/Right"
         Reload      = "Alt + Ctrl + R"
     }
 
@@ -110,7 +110,7 @@ function global:Show-QuakeCheatsheet {
                         }
                         'RotatePanes' { $hotkeys.RotatePanes = Convert-AhkKey $v 'Alt + Shift + Space' }
                         'MoveVisorLeft' {
-                            $baseMod = Convert-AhkKey $v 'Win + Shift + Left'
+                            $baseMod = Convert-AhkKey $v 'Alt + Ctrl + Left'
                             $hotkeys.MoveVisor = ($baseMod -replace 'Left', 'Left/Right')
                         }
                         'ReloadScript'{ $hotkeys.Reload      = Convert-AhkKey $v 'Alt + Ctrl + R' }

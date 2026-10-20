@@ -11,21 +11,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## Features
 ### Major
-- **Cross-Monitor Visor Relocation & Workspace Swapping (`Win + Shift + Left / Right`)**: Added dynamic multi-monitor visor migration allowing users to shift or swap their active terminal cluster across physical monitors without closing or restarting shells.
+- **Cross-Monitor Visor Relocation & Workspace Swapping (`Alt + Ctrl + Left / Right`)**: Added dynamic multi-monitor visor migration allowing users to shift or swap their active terminal cluster across physical monitors without closing or restarting shells.
   - Supports both empty display migration (moving all windows and seam dividers to the target screen) and occupied display swapping (atomic pairwise exchange of terminal pools between screens).
   - Automatically sorts displays by physical X-coordinate (`mL`) rather than arbitrary Windows monitor IDs, ensuring directional arrows always map accurately to physical left/right desktop layouts.
   - Safely clamps at outer monitor boundaries to prevent accidental wraparound disorientation.
   - Full compatibility with both `MultiMonitorMode=isolated` (per-monitor workspaces) and `MultiMonitorMode=hopping` (roaming single pool).
 ### Minor
-- **In-Terminal Cheat Sheet Synchronization (`welcome.ps1`)**: Added `Win + Shift + Left/Right` to the quickstart cheat sheet table and patched the `config.ini` parser to strip inline comments.
+- **In-Terminal Cheat Sheet Synchronization (`welcome.ps1`)**: Added `Alt + Ctrl + Left/Right` to the quickstart cheat sheet table and patched the `config.ini` parser to strip inline comments.
 
 ## Fixes
 ### Major
 - **Multi-Monitor Swap Reversion Fix (`TileAlacritty`)**: Prevented `SyncMonitorWindows` from checking physical window positions and reverting array swaps before `WinMove` coordinates are applied during `MoveVisorDirection`.
-- **Windows OS Native Hotkey Suppression (`$#+Left` / `$#+Right`)**: Enforced low-level keyboard hook (`InstallKeybdHook`, `$`) on `#` modifier hotkeys to prevent Windows DWM / Explorer from natively hijacking `Win + Shift + Left / Right` and tearing individual windows.
+- **Windows OS Native Hotkey Hijack Mitigation (`!^Left` / `!^Right`)**: Replaced `Win + Shift + Left / Right` with `Alt + Ctrl + Left / Right`. In Windows 11, `Win + Shift + Left / Right` is natively hooked by DWM/Explorer at the shell level to move single windows between monitors, bypassing non-elevated user-mode keyboard hooks and preventing full-visor swapping. Defaulting to `Alt + Ctrl` cleanly avoids OS interception while aligning with the internal `Alt` modifier navigation hierarchy.
 
 ### Minor
-- **Inline Comment Sanitization in Help Banner**: Fixed an issue where inline comments in `config.ini` (e.g. `ToggleVisor=#sc029 ; Win + §`) were erroneously parsed as modifier tokens by `welcome.ps1`.
+- **Inline Comment Sanitization in Help Banner**: Fixed an issue where inline comments in `config.ini` (e.g. `ToggleVisor=#sc029 ; Win + Â§`) were erroneously parsed as modifier tokens by `welcome.ps1`.
 
 ## Window Management & Multi-Monitor
 - Implemented physical monitor spatial sorting (`MoveVisorDirection`) using `MonitorGet` coordinates.
@@ -36,14 +36,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 _None_
 
 ## Configuration & Tooling
-- Added `[Hotkeys] MoveVisorLeft` (`#+Left`) and `MoveVisorRight` (`#+Right`) to `config.ini` and `README.md`.
+- Added `[Hotkeys] MoveVisorLeft` (`!^Left`) and `MoveVisorRight` (`!^Right`) to `config.ini` and `README.md`.
 
 ---
 ## [0.9.0] - 2026-10-20
 
 ## Features
 ### Major
-- **Interactive CLI Setup Wizard (`install.ps1`)**: Introduced a guided CLI setup wizard prompting users for prerequisite installations (Alacritty, AHK v2, Nerd Font via winget), default shell configuration (PowerShell, WSL Bash, Git Bash), keyboard layout mapping (Nordic `Win + §` vs. US ANSI `Win + ` `), and Windows startup integration.
+- **Interactive CLI Setup Wizard (`install.ps1`)**: Introduced a guided CLI setup wizard prompting users for prerequisite installations (Alacritty, AHK v2, Nerd Font via winget), default shell configuration (PowerShell, WSL Bash, Git Bash), keyboard layout mapping (Nordic `Win + Â§` vs. US ANSI `Win + ` `), and Windows startup integration.
 - **Dedicated Uninstaller (`uninstall.ps1`)**: Added a clean uninstallation script that stops running Quake Alacritty processes, removes startup shortcuts, unregisters profile hooks from `$PROFILE`, and removes deployed application scripts while allowing users to keep or delete their custom configuration files.
 ### Minor
 - **Shell-Agnostic Launch Execution (`LaunchTerminalProcess`)**: Patched `quake_alacritty.ahk` to resolve `GetConfiguredShell()` from `alacritty.toml`. Non-PowerShell shells (e.g. `wsl.exe`, `bash.exe`) bypass PowerShell-specific startup flags (`-NoLogo -NoExit ... welcome.ps1`), allowing custom shells to launch cleanly without getting overridden.
@@ -93,7 +93,7 @@ _None_
 
 ## Features
 ### Major
-- **Sleek Startup Help Command Hint (`ShowHelpOnStart=tip`)**: Replaced full-table startup dumping with a clean, unobtrusive 1-line reminder (`💡 Tip: Type 'quake-help' to view keyboard shortcuts`) on every terminal launch (both visor cold starts and splits).
+- **Sleek Startup Help Command Hint (`ShowHelpOnStart=tip`)**: Replaced full-table startup dumping with a clean, unobtrusive 1-line reminder (`ðŸ’¡ Tip: Type 'quake-help' to view keyboard shortcuts`) on every terminal launch (both visor cold starts and splits).
 - **Interactive Quickstart Cheat Sheet on Demand (`quake-help`)**: Running `quake-help` anytime in any terminal session displays the complete 20-line ANSI quickstart cheat sheet box.
 ### Minor
 - **Configurable Help Display Modes**: Added `[General] ShowHelpOnStart` supporting `tip` (sleek 1-line hint on start, default), `banner` (full table on start), and `none` (completely silent startup).
@@ -101,7 +101,7 @@ _None_
 
 ## Fixes
 ### Major
-- **PowerShell 5.1 ANSI Quote Parsing Fix (`welcome.ps1`)**: Resolved parser crash (`Unexpected token 'Œ'`) occurring in Windows PowerShell 5.1 when executing `welcome.ps1`. Replaced raw multibyte Unicode box characters with ASCII-safe `[string][char]0x...` definitions and ensured UTF-8 with BOM (`EF BB BF`) output encoding.
+- **PowerShell 5.1 ANSI Quote Parsing Fix (`welcome.ps1`)**: Resolved parser crash (`Unexpected token 'Å’'`) occurring in Windows PowerShell 5.1 when executing `welcome.ps1`. Replaced raw multibyte Unicode box characters with ASCII-safe `[string][char]0x...` definitions and ensured UTF-8 with BOM (`EF BB BF`) output encoding.
 ### Minor
 _None_
 
@@ -120,7 +120,7 @@ _None_
 
 ## Features
 ### Major
-- **Independent Per-Monitor Terminal Workspaces (`MultiMonitorMode=isolated`)**: Each physical monitor now maintains its own isolated terminal workspace (`g_MonitorWindows := Map()`). Toggling the visor (`Win + §`) on one display strictly shows or hides only that display's terminals without disrupting terminals on other screens.
+- **Independent Per-Monitor Terminal Workspaces (`MultiMonitorMode=isolated`)**: Each physical monitor now maintains its own isolated terminal workspace (`g_MonitorWindows := Map()`). Toggling the visor (`Win + Â§`) on one display strictly shows or hides only that display's terminals without disrupting terminals on other screens.
 - **Display Topology Safety & Migration (`WM_DISPLAYCHANGE`)**: Added automatic event listener for Windows message `0x007E` (`WM_DISPLAYCHANGE`). If a secondary monitor is unplugged, disconnected, or enters sleep mode, any orphaned terminals belonging to it are automatically migrated to the primary display.
 ### Minor
 - **Per-Monitor Divider Isolation**: Cyan seam dividers are now tracked independently per monitor (`g_MonitorDividers[targetMon] := []`). Tiling, showing, or hiding splits on one display never affects or flickers divider lines on other displays.
@@ -212,7 +212,7 @@ _None_
 ### Major
 _None_
 ### Minor
-- **Cold-Start Visor Focus (`Win + §`)**: Automatically shift keyboard typing focus via `WinActivate` to the newly launched Alacritty terminal on initial cold start, preventing focus from remaining on background desktop applications.
+- **Cold-Start Visor Focus (`Win + Â§`)**: Automatically shift keyboard typing focus via `WinActivate` to the newly launched Alacritty terminal on initial cold start, preventing focus from remaining on background desktop applications.
 
 ## Window Management & Multi-Monitor
 - **Adaptive Cold-Start Polling**: Extended initial window appearance polling in `ToggleVisor()` to accommodate GPU context initialization during fresh process launch before asserting window focus.
@@ -294,7 +294,7 @@ _None_
 
 ## Window Management & Multi-Monitor
 - **Instant Snap Performance (`SetWinDelay -1`)**: Disabled artificial AutoHotkey window delays (`SetWinDelay -1`, `SetControlDelay -1`), eliminating 100ms pauses between individual `WinMove` / `WinShow` calls for instantaneous pane swapping.
-- **Adaptive Split Spawning**: Replaced static `Sleep 350` and `Sleep 200` delays in `Alt + Enter`, `Alt + W`, and `#§` with adaptive 15ms polling loops, shaving up to ~250ms off terminal split launch and collapse times.
+- **Adaptive Split Spawning**: Replaced static `Sleep 350` and `Sleep 200` delays in `Alt + Enter`, `Alt + W`, and `#Â§` with adaptive 15ms polling loops, shaving up to ~250ms off terminal split launch and collapse times.
 
 ## Styling & Appearance
 _None_
@@ -308,9 +308,9 @@ _None_
 
 ## Features
 ### Major
-- **Drop-Down Visor (`Win + §`)**: Global hotkey toggling terminal visor from top of screen on the display currently holding the mouse cursor; seamlessly hops screens if already open elsewhere.
-- **Smart Dynamic 2×2 Tiling (`Alt + Enter`, `Alt + W`, `Alt + R`)**:
-  - Automatically balances layouts for 1 (top visor), 2 (top split), 3 (T-split), and 4 (2×2 quad grid) terminals.
+- **Drop-Down Visor (`Win + Â§`)**: Global hotkey toggling terminal visor from top of screen on the display currently holding the mouse cursor; seamlessly hops screens if already open elsewhere.
+- **Smart Dynamic 2Ã—2 Tiling (`Alt + Enter`, `Alt + W`, `Alt + R`)**:
+  - Automatically balances layouts for 1 (top visor), 2 (top split), 3 (T-split), and 4 (2Ã—2 quad grid) terminals.
   - Automatically rebalances and collapses splits when closing any pane with `Alt + W`.
 
 ### Minor
