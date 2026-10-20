@@ -277,3 +277,21 @@ Because AutoHotkey was not receiving any window destruction notification, the GU
 
 3. **Reentrancy Guard (`g_LayoutLock`)**:
    A reference-counted lock (`g_LayoutLock++` / `g_LayoutLock--` wrapped in `try ... finally`) prevents the watchdog from executing concurrently during active user tiling, split spawning, or manual close operations.
+
+---
+
+## 14. AppData Deployment Copies vs Live Repo Development (`Alt + Ctrl + R` Reload Desync)
+
+### Symptom
+- Code changes in `quake_alacritty.ahk` inside the git repository are saved and committed, and `Alt + Ctrl + R` is pressed inside Alacritty, but the running script behaves identically to the old code.
+
+### Root Cause
+`install.ps1` by default copies repository files to `%APPDATA%\alacritty` and registers the startup shortcut to point to `%APPDATA%\alacritty\quake_alacritty.ahk`.
+When developing in `repos\quake-alacritty`, editing the repository file does not touch the `%APPDATA%` copy. When AutoHotkey executes `Reload()` via `Alt + Ctrl + R`, it re-reads its own script path (`A_ScriptFullPath` = `%APPDATA%\alacritty\quake_alacritty.ahk`), loading the stale deployed copy instead of the repository file.
+
+### Established Solution
+Always link `%APPDATA%\alacritty` to the repository directory using symbolic links via `cmd /c mklink` (supported without admin rights when Windows Developer Mode is enabled):
+```powershell
+cmd /c "del `"%APPDATA%\alacritty\quake_alacritty.ahk`" && mklink `"%APPDATA%\alacritty\quake_alacritty.ahk`" `"C:\Users\maxve\repos\quake-alacritty\quake_alacritty.ahk`""
+```
+With symbolic links in place, `A_ScriptFullPath` resolves directly to the repository file, guaranteeing that in-process reload (`Alt + Ctrl + R`) immediately executes live code edits.
