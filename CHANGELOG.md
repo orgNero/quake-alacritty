@@ -36,9 +36,10 @@ _None_
 
 ## Features
 ### Major
-- **Always Show Help Command on Every Terminal Start (`ShowHelpOnStart=always`)**: Enabled automatic presentation of the ANSI quickstart cheat sheet banner whenever a terminal is spawned -- including visor cold starts on any monitor and new split panes (`Alt + Enter`).
+- **Sleek Startup Help Command Hint (`ShowHelpOnStart=tip`)**: Replaced full-table startup dumping with a clean, unobtrusive 1-line reminder (`💡 Tip: Type 'quake-help' to view keyboard shortcuts`) on every terminal launch (both visor cold starts and splits).
+- **Interactive Quickstart Cheat Sheet on Demand (`quake-help`)**: Running `quake-help` anytime in any terminal session displays the complete 20-line ANSI quickstart cheat sheet box.
 ### Minor
-- **Configurable Help Display Modes**: Added `[General] ShowHelpOnStart` supporting `always` (display on every terminal launch, default), `first-run` (display only on initial setup), and `never` (clean startup, accessible via `quake-help`).
+- **Configurable Help Display Modes**: Added `[General] ShowHelpOnStart` supporting `tip` (sleek 1-line hint on start, default), `banner` (full table on start), and `none` (completely silent startup).
 - **Centralized Terminal Launcher (`LaunchTerminalProcess`)**: Consolidated terminal invocation into a unified launcher across visor toggling and split creation.
 
 ## Fixes
@@ -54,7 +55,7 @@ _None_
 - **Cheat Sheet Label Polish**: Aligned visor shortcut description in `welcome.ps1` to reflect mouse-aware per-display toggling.
 
 ## Configuration & Tooling
-- **Configuration Option in `config.ini`**: Added `[General] ShowHelpOnStart=always` with documentation in `config.ini` and `README.md`.
+- **Configuration Option in `config.ini`**: Added `[General] ShowHelpOnStart=tip` with documentation in `config.ini` and `README.md`.
 
 ---
 
