@@ -7,6 +7,34 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.11.1] - 2026-10-20
+
+## Features
+### Major
+_None_
+### Minor
+- **Native `Alt + F4` Hotkey Mapping**: Mapped `!F4` inside Alacritty directly to `CloseSplit()`, providing instant (0ms) closing, dynamic grid rebalancing, and divider cleanup identical to `Alt + W`.
+
+## Fixes
+### Major
+- **Orphan Seam Divider Cleanup on External Close (`Alt + F4`, `exit`)**: Fixed a bug where closing terminals via `Alt + F4`, shell `exit`, or external process termination left cyan seam divider outlines permanently drawn on screen over the desktop. Introduced a lightweight background watchdog timer (`WatchdogCheck`, 250ms) that detects window destruction and immediately purges orphan dividers if all terminals on a monitor close, or automatically rebalances remaining panes if other splits are still open.
+### Minor
+_None_
+
+## Window Management & Multi-Monitor
+- Added reentrancy guard (`g_LayoutLock`) preventing concurrent watchdog execution during active split spawning, manual closing, or visor tiling operations.
+- Added automatic divider cleanup to `SyncMonitorWindows` when dead windows are pruned to zero on an isolated monitor.
+- Symmetrical remaining window focus activation in hopping mode on split close.
+
+## Styling & Appearance
+_None_
+
+## Configuration & Tooling
+- Documented `Alt + F4` alongside `Alt + W` across `README.md` and `config.ini`.
+- Added comprehensive root cause analysis and technical mitigation documentation to `docs/BUGS_AND_GOTCHAS.md` (Section 13).
+
+---
+
 ## [0.11.0] - 2026-10-20
 
 ## Features
