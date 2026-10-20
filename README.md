@@ -38,7 +38,7 @@ Features mouse-aware multi-monitor detection, dynamic 2×2 quad grid tiling, acr
 * **Auto-Rebalancing & Transitions (`Alt + W`):** Closing any terminal automatically collapses and re-tiles the remaining ones. Closing a stacked split preserves the remaining terminal on its half-screen column without snapping to full-width visor.
 * **Keyboard Pane Navigation (`Alt + Arrows`):** Hop typing focus between splits without touching the mouse, featuring deterministic tie-breaking across asymmetrical master layouts.
 * **Window Swapping & Rotation (`Alt + Shift + Arrows`, `Alt + Shift + Space`):** Rearrange panes on the fly by swapping with adjacent windows or rotating all positions cyclically without losing keyboard focus.
-* **In-Terminal Cheat Sheet Banner & Help Command (`quake-help`):** Greets you with an in-buffer ANSI quickstart cheat sheet formatted in theme-matching electric cyan. Configurable via `ShowHelpOnStart=always` in `config.ini` to display on every terminal launch (`always`), only on initial setup (`first-run`), or disabled (`never`). Can also be redisplayed anytime on demand by running `quake-help`.
+* **In-Terminal Startup Help Hint & Cheat Sheet (`quake-help`):** Displays a sleek 1-line reminder (`💡 Tip: Type 'quake-help' to view keyboard shortcuts`) on every terminal start. Configurable via `ShowHelpOnStart=tip` in `config.ini` (`tip` for sleek 1-line hint, `banner` for full 20-line table, `none` for silent startup). Running `quake-help` displays the full electric cyan quickstart cheat sheet on demand anytime.
 * **Taskbar Awareness:** Respects custom work areas (such as left-docked taskbars) using `MonitorGetWorkArea`.
 
 ---
@@ -115,8 +115,8 @@ Located at `%APPDATA%\alacritty\config.ini` (or the repository root):
 FirstRun=true
 ; Multi-monitor visor workspace mode (isolated | hopping)
 MultiMonitorMode=isolated
-; Help cheat sheet banner on terminal launch (always | first-run | never)
-ShowHelpOnStart=always
+; Help command hint on terminal launch (tip | banner | none)
+ShowHelpOnStart=tip
 
 [Appearance]
 ; Seam divider thickness in pixels (1-5px)
