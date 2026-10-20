@@ -1,4 +1,4 @@
-﻿# Changelog
+# Changelog
 
 All notable changes to this project will be documented in this file.
 Every merge from a development branch into `main` must add an entry describing what was included.
@@ -71,7 +71,7 @@ _None_
 
 ## Features
 ### Major
-- **Interactive CLI Setup Wizard (`install.ps1`)**: Introduced a guided CLI setup wizard prompting users for prerequisite installations (Alacritty, AHK v2, Nerd Font via winget), default shell configuration (PowerShell, WSL Bash, Git Bash), keyboard layout mapping (Nordic `Win + Â§` vs. US ANSI `Win + ` `), and Windows startup integration.
+- **Interactive CLI Setup Wizard (`install.ps1`)**: Introduced a guided CLI setup wizard prompting users for prerequisite installations (Alacritty, AHK v2, Nerd Font via winget), default shell configuration (PowerShell, WSL Bash, Git Bash), keyboard layout mapping (Nordic `Win + §` vs. US ANSI `` `Win + ` ``), and Windows startup integration.
 - **Dedicated Uninstaller (`uninstall.ps1`)**: Added a clean uninstallation script that stops running Quake Alacritty processes, removes startup shortcuts, unregisters profile hooks from `$PROFILE`, and removes deployed application scripts while allowing users to keep or delete their custom configuration files.
 ### Minor
 - **Shell-Agnostic Launch Execution (`LaunchTerminalProcess`)**: Patched `quake_alacritty.ahk` to resolve `GetConfiguredShell()` from `alacritty.toml`. Non-PowerShell shells (e.g. `wsl.exe`, `bash.exe`) bypass PowerShell-specific startup flags (`-NoLogo -NoExit ... welcome.ps1`), allowing custom shells to launch cleanly without getting overridden.
