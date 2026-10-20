@@ -14,6 +14,7 @@ global g_BorderGap          := 2
 global g_BorderColor        := "38bdf8"
 global g_VisorHeightPercent := 0.40
 global g_MultiMonitorMode   := "isolated"
+global g_ShowHelpOnStart    := "always"
 global g_FirstRun           := false
 
 ; Layout settings
@@ -53,7 +54,7 @@ global g_MonitorSinglePaneSide := Map()  ; monId (int) -> string ("", "left", "r
 ; Helper: Resolves configuration file location and loads user preferences
 LoadConfig()
 {
-    global g_ConfigFile, g_BorderGap, g_BorderColor, g_VisorHeightPercent, g_MultiMonitorMode, g_FirstRun
+    global g_ConfigFile, g_BorderGap, g_BorderColor, g_VisorHeightPercent, g_MultiMonitorMode, g_ShowHelpOnStart, g_FirstRun
     global g_TileLayout, g_TwoPaneLayout, g_KeyCycleLayout
     global g_KeyToggleVisor, g_KeySplit, g_KeyClose, g_KeyRetile
     global g_KeyFocusLeft, g_KeyFocusRight, g_KeyFocusUp, g_KeyFocusDown
@@ -83,6 +84,16 @@ LoadConfig()
             g_MultiMonitorMode := modeVal
         else
             g_MultiMonitorMode := "isolated"
+
+        helpVal := Trim(StrLower(IniRead(g_ConfigFile, "General", "ShowHelpOnStart", "always")))
+        if (helpVal == "always" || helpVal == "first-run" || helpVal == "never")
+            g_ShowHelpOnStart := helpVal
+        else if (helpVal == "true" || helpVal == "1")
+            g_ShowHelpOnStart := "always"
+        else if (helpVal == "false" || helpVal == "0")
+            g_ShowHelpOnStart := "never"
+        else
+            g_ShowHelpOnStart := "always"
     }
 
     ; 3. [Appearance]
@@ -1352,13 +1363,13 @@ GetDefaultShell()
     return "powershell.exe"
 }
 
-; Helper: Spawns the initial terminal window on target monitor (handling welcome banner if first run)
-LaunchNewTerminal(targetMon)
+; Helper: Launches an Alacritty process, injecting welcome cheat sheet if configured
+LaunchTerminalProcess()
 {
-    global g_FirstRun, g_ConfigFile, g_MultiMonitorMode, g_MonitorWindows
-    oldWindows := GetAlacrittyWindows()
+    global g_ShowHelpOnStart, g_FirstRun, g_ConfigFile
+    shouldShowHelp := (g_ShowHelpOnStart == "always") || (g_ShowHelpOnStart == "first-run" && g_FirstRun)
 
-    if (g_FirstRun)
+    if (shouldShowHelp)
     {
         welcomeScript := ""
         if FileExist(A_ScriptDir . "\welcome.ps1")
@@ -1370,23 +1381,27 @@ LaunchNewTerminal(targetMon)
         {
             shellProg := GetDefaultShell()
             Run(Format('alacritty.exe -e {1} -NoLogo -NoExit -ExecutionPolicy Bypass -File "{2}"', shellProg, welcomeScript))
-        }
-        else
-        {
-            Run("alacritty.exe")
-        }
 
-        ; Mark first run complete and persist to config.ini
-        g_FirstRun := false
-        if (g_ConfigFile != "" && FileExist(g_ConfigFile))
-        {
-            try IniWrite("false", g_ConfigFile, "General", "FirstRun")
+            if (g_ShowHelpOnStart == "first-run" && g_FirstRun)
+            {
+                g_FirstRun := false
+                if (g_ConfigFile != "" && FileExist(g_ConfigFile))
+                    try IniWrite("false", g_ConfigFile, "General", "FirstRun")
+            }
+            return
         }
     }
-    else
-    {
-        Run("alacritty.exe")
-    }
+
+    Run("alacritty.exe")
+}
+
+; Helper: Spawns the initial terminal window on target monitor (handling welcome banner if configured)
+LaunchNewTerminal(targetMon)
+{
+    global g_MultiMonitorMode, g_MonitorWindows
+    oldWindows := GetAlacrittyWindows()
+
+    LaunchTerminalProcess()
 
     firstHwnd := 0
     ; Adaptive polling: tile immediately once window appears (up to 1.5s cold start)
@@ -1555,11 +1570,11 @@ SpawnSplit()
     }
 
     allBefore := GetAlacrittyWindows()
-    Run("alacritty.exe")
+    LaunchTerminalProcess()
 
     newHwnd := 0
-    ; Adaptive polling: tile immediately once new window appears (up to 450ms max)
-    Loop 30 {
+    ; Adaptive polling: tile immediately once new window appears (up to 750ms max)
+    Loop 50 {
         Sleep 15
         allNow := GetAlacrittyWindows()
         if (allNow.Length > allBefore.Length)
