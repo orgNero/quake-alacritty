@@ -225,3 +225,23 @@ Because PowerShell treats Unicode right double quotation marks (`”`) as matchi
 ### Established Solution
 1. **ASCII-Safe Unicode Codepoints**: Never use raw multibyte Unicode box literals inside `.ps1` string concatenation. Define glyphs programmatically using `[string][char]0x250C` (`┌`), `[string][char]0x2500` (`─`), `[string][char]0x00A7` (`§`), etc.
 2. **UTF-8 with BOM (`EF BB BF`) Enforcement**: Always save `.ps1` files using `New-Object System.Text.UTF8Encoding($true)` so PowerShell 5.1 reliably recognizes the UTF-8 encoding.
+
+---
+
+## 12. Windows 11 DWM Interception of `Win + Shift + Left / Right`
+
+### Symptom
+- Pressing `Win + Shift + Left` or `Win + Shift + Right` shifts only the single currently focused terminal pane across monitors, dropping it on top of existing windows on the other screen.
+- AutoHotkey's multi-window visor migration / swap handler never executes (or executes after the window has already been moved by the OS).
+
+### Root Cause
+In Windows 10 and 11, `Win + Shift + Left` and `Win + Shift + Right` are hardcoded shell hotkeys registered by Windows Explorer and the Desktop Window Manager (DWM) for moving the active window to an adjacent display.
+Because AutoHotkey runs under standard user token integrity, Windows intercepts and processes these specific `Win + Shift + Arrow` combinations at the kernel/win32k input level *before* AHK's low-level keyboard hook (`WH_KEYBOARD_LL`) can suppress or redirect them.
+
+### Established Solution
+Avoid using `#+Left` / `#+Right` as default keybindings for application-level multi-window migration.
+Use an `Alt`-family modifier combination that Windows DWM never intercepts: **`Alt + Ctrl + Left` / `Alt + Ctrl + Right`** (`!^Left` / `!^Right`).
+This fits naturally into Quake Alacritty's navigation hierarchy:
+- `Alt + Arrows`: Move focus between panes
+- `Alt + Shift + Arrows`: Swap pane positions within the current monitor
+- `Alt + Ctrl + Left / Right`: Swap entire visor workspace across physical monitors

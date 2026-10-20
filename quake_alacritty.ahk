@@ -38,8 +38,8 @@ global g_KeySwapRight       := "!+Right"
 global g_KeySwapUp          := "!+Up"
 global g_KeySwapDown        := "!+Down"
 global g_KeyRotate          := "!+Space"
-global g_KeyMoveVisorLeft   := "#+Left"
-global g_KeyMoveVisorRight  := "#+Right"
+global g_KeyMoveVisorLeft   := "!^Left"
+global g_KeyMoveVisorRight  := "!^Right"
 global g_KeyReload          := "!^r"
 
 ; Window & Divider trackers
@@ -1316,8 +1316,8 @@ MoveVisorDirection(dir)
     }
 
     ; 5. Isolated mode: swap/relocate window workspaces between srcMon and dstMon
-    SyncMonitorWindows(srcMon)
-    SyncMonitorWindows(dstMon)
+    SyncMonitorWindows()
+
 
     if (!g_MonitorWindows.Has(srcMon))
         g_MonitorWindows[srcMon] := []

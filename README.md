@@ -59,7 +59,7 @@ Features mouse-aware multi-monitor detection, dynamic 2×2 quad grid tiling, acr
 | **`Alt + Shift + Left` / `Right`** | Inside Alacritty | Swap active pane position with left / right neighbor |
 | **`Alt + Shift + Up` / `Down`** | Inside Alacritty | Swap active pane position with top / bottom neighbor |
 | **`Alt + Shift + Space`** | Inside Alacritty | Rotate all terminal pane positions cyclically clockwise |
-| **`Win + Shift + Left` / `Right`** | Inside Alacritty | Move / swap entire visor workspace across monitors (spatial order) |
+| **`Alt + Ctrl + Left` / `Right`** | Inside Alacritty | Move / swap entire visor workspace across monitors (spatial order) |
 | **`Alt + Ctrl + R`** | Inside Alacritty | Instant in-process script reload (development & config refresh) |
 
 ---
@@ -178,8 +178,8 @@ SwapDown=!+Down
 RotatePanes=!+Space
 
 ; Multi-monitor visor migration & swapping
-MoveVisorLeft=#+Left
-MoveVisorRight=#+Right
+MoveVisorLeft=!^Left
+MoveVisorRight=!^Right
 
 ; Development in-process reload
 ReloadScript=!^r
