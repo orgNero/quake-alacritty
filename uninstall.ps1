@@ -47,15 +47,16 @@ Write-Host "`n📜 Cleaning up PowerShell profile..." -ForegroundColor Yellow
 if (Test-Path $PROFILE) {
     try {
         $profileContent = Get-Content $PROFILE -Raw -ErrorAction SilentlyContinue
-        if ($profileContent -match 'quake-help') {
+        if ($profileContent -match 'quake-help|quake-env') {
             # Remove comment and function line
-            $cleaned = $profileContent -replace '(?m)^\s*# Quake Alacritty Cheat Sheet\s*[\r\n]+', ''
+            $cleaned = $profileContent -replace '(?m)^\s*# Quake Alacritty Cheat Sheet.*\s*[\r\n]+', ''
             $cleaned = $cleaned -replace '(?m)^\s*function quake-help\s*\{[^}]*\}\s*[\r\n]+', ''
+            $cleaned = $cleaned -replace '(?m)^\s*function quake-env\s*\{[^}]*\}\s*[\r\n]+', ''
             $cleaned = $cleaned.TrimEnd() + "`r`n"
             Set-Content -Path $PROFILE -Value $cleaned -Encoding UTF8
-            Write-Host "  Removed 'quake-help' registration from `$PROFILE." -ForegroundColor Green
+            Write-Host "  Removed 'quake-help' and 'quake-env' registrations from `$PROFILE." -ForegroundColor Green
         } else {
-            Write-Host "  'quake-help' not found in `$PROFILE." -ForegroundColor Gray
+            Write-Host "  'quake-help' / 'quake-env' not found in `$PROFILE." -ForegroundColor Gray
         }
     } catch {
         Write-Warning "  Could not update PowerShell profile: $_"
