@@ -1,11 +1,26 @@
 ﻿# Quake Alacritty - In-Terminal Welcome Banner & Cheat Sheet
 [CmdletBinding()]
-param()
+param(
+    [switch]$TipOnly
+)
 
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 $OutputEncoding = [System.Text.Encoding]::UTF8
 
-function Show-QuakeCheatsheet {
+function global:Show-QuakeTip {
+    $esc      = [char]27
+    $cSub     = $esc + "[38;2;148;163;184m"    # Slate 400
+    $cKey     = $esc + "[1;38;2;56;189;248m"   # Bright Cyan (#38bdf8)
+    $cYellow  = $esc + "[38;2;251;191;36m"    # Amber 400
+    $cReset   = $esc + "[0m"
+    $chBulb   = [char]::ConvertFromUtf32(0x1F4A1) # 💡
+
+    Write-Host ""
+    Write-Host ("  " + $cYellow + $chBulb + " " + $cSub + "Tip: Type '" + $cKey + "quake-help" + $cSub + "' to view keyboard shortcuts." + $cReset)
+    Write-Host ""
+}
+
+function global:Show-QuakeCheatsheet {
     # Resolve config.ini location (%APPDATA%\alacritty\config.ini or local script directory)
     $configPath = Join-Path $env:APPDATA "alacritty\config.ini"
     if (-not (Test-Path $configPath)) {
@@ -169,5 +184,8 @@ function global:quake-help {
     Show-QuakeCheatsheet
 }
 
-# Display immediately on execution
-Show-QuakeCheatsheet
+if ($TipOnly) {
+    Show-QuakeTip
+} else {
+    Show-QuakeCheatsheet
+}
