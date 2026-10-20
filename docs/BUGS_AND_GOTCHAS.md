@@ -245,3 +245,35 @@ This fits naturally into Quake Alacritty's navigation hierarchy:
 - `Alt + Arrows`: Move focus between panes
 - `Alt + Shift + Arrows`: Swap pane positions within the current monitor
 - `Alt + Ctrl + Left / Right`: Swap entire visor workspace across physical monitors
+
+---
+
+## 13. Spontaneous Window Termination & Orphan Divider Outlines (`Alt + F4`, `exit`)
+
+### Symptom
+- Closing split terminals via `Alt + F4`, typing `exit`, or killing a terminal process leaves cyan seam divider lines ("outlines") permanently visible and floating on the screen.
+- Closing one split terminal via `Alt + F4` or `exit` leaves the remaining terminal stuck in its split dimensions (e.g. 50% width) with the seam divider frozen in place.
+
+### Root Cause
+Dividers are independent click-through GUI windows (`Gui("+AlwaysOnTop -Caption +ToolWindow +E0x20 -DPIScale")`) tracked in `g_MonitorDividers` and `g_Dividers`.
+While `CloseSplit()` (bound to `Alt + W`) explicitly calls `ClearDividers()` and rebalances remaining terminals, native Windows operations—such as pressing `Alt + F4`, typing `exit`, or killing the process—terminate the window at the OS/win32 level completely bypassing AutoHotkey's script execution.
+Because AutoHotkey was not receiving any window destruction notification, the GUI divider windows remained orphaned and rendered on top of the desktop.
+
+### Established Solution
+1. **Direct `!F4` Context Hook**:
+   Map `!F4` directly to `CloseSplit()` under `HotIfWinActive("ahk_exe alacritty.exe")`:
+   ```autohotkey
+   RegisterKey("!F4", (*) => CloseSplit())
+   ```
+   This ensures that pressing `Alt + F4` while focused inside any Alacritty pane triggers instant (0ms) graceful closure, dynamic layout rebalancing, and divider cleanup identical to `Alt + W`.
+
+2. **Background Watchdog Timer (`WatchdogCheck`, 250ms)**:
+   A lightweight periodic timer checks tracked HWNDs against live OS window existence (`WinExist` / `GetAlacrittyWindows`):
+   - If zero Alacritty windows exist across the system, all dividers are purged immediately.
+   - If a window closed spontaneously (via `exit`, `Ctrl + D`, crash, or task manager) on an isolated monitor:
+     - If zero windows remain on that monitor, `ClearDividers(monId)` destroys all orphan outlines.
+     - If remaining windows exist and are visible, `TileAlacritty(monId)` smoothly re-tiles and expands the remaining panes into the vacated space.
+   - If no tracked windows or dividers exist, the watchdog exits in nanoseconds with negligible CPU overhead.
+
+3. **Reentrancy Guard (`g_LayoutLock`)**:
+   A reference-counted lock (`g_LayoutLock++` / `g_LayoutLock--` wrapped in `try ... finally`) prevents the watchdog from executing concurrently during active user tiling, split spawning, or manual close operations.
