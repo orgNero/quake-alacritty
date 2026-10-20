@@ -1356,8 +1356,8 @@ CycleLayout()
 ; Window Management Actions
 ; -------------------------------------------------------------
 
-; Helper: Resolves the default shell executable configured in alacritty.toml
-GetDefaultShell()
+; Helper: Resolves the configured shell executable from alacritty.toml
+GetConfiguredShell()
 {
     appDataToml := EnvGet("APPDATA") . "\alacritty\alacritty.toml"
     localToml   := A_ScriptDir . "\alacritty.toml"
@@ -1369,16 +1369,26 @@ GetDefaultShell()
             content := FileRead(tomlPath)
             if RegExMatch(content, 'i)program\s*=\s*"([^"]+)"', &m)
             {
-                prog := m[1]
-                if (InStr(prog, "pwsh") || InStr(prog, "powershell"))
-                    return prog
+                return m[1]
             }
         }
     }
     return "powershell.exe"
 }
 
-; Helper: Launches an Alacritty process, injecting welcome cheat sheet if configured
+; Backward-compatible alias
+GetDefaultShell()
+{
+    return GetConfiguredShell()
+}
+
+; Helper: Checks if the configured shell executable is PowerShell (pwsh or powershell)
+IsPowerShell(shellProg)
+{
+    return (InStr(shellProg, "pwsh") || InStr(shellProg, "powershell"))
+}
+
+; Helper: Launches an Alacritty process, injecting welcome cheat sheet if configured and shell is PowerShell
 LaunchTerminalProcess()
 {
     global g_ShowHelpOnStart, g_FirstRun, g_ConfigFile
@@ -1386,26 +1396,37 @@ LaunchTerminalProcess()
 
     if (shouldShowHelp)
     {
-        welcomeScript := ""
-        if FileExist(A_ScriptDir . "\welcome.ps1")
-            welcomeScript := A_ScriptDir . "\welcome.ps1"
-        else if FileExist(EnvGet("APPDATA") . "\alacritty\welcome.ps1")
-            welcomeScript := EnvGet("APPDATA") . "\alacritty\welcome.ps1"
-
-        if (welcomeScript != "")
+        configuredShell := GetConfiguredShell()
+        if (IsPowerShell(configuredShell))
         {
-            shellProg := GetDefaultShell()
-            argFlag := (g_ShowHelpOnStart == "tip") ? " -TipOnly" : ""
-            Run(Format('alacritty.exe -e {1} -NoLogo -NoExit -ExecutionPolicy Bypass -File "{2}"{3}', shellProg, welcomeScript, argFlag))
+            welcomeScript := ""
+            if FileExist(A_ScriptDir . "\welcome.ps1")
+                welcomeScript := A_ScriptDir . "\welcome.ps1"
+            else if FileExist(EnvGet("APPDATA") . "\alacritty\welcome.ps1")
+                welcomeScript := EnvGet("APPDATA") . "\alacritty\welcome.ps1"
 
-            if (g_ShowHelpOnStart == "first-run" && g_FirstRun)
+            if (welcomeScript != "")
             {
-                g_FirstRun := false
-                if (g_ConfigFile != "" && FileExist(g_ConfigFile))
-                    try IniWrite("false", g_ConfigFile, "General", "FirstRun")
+                argFlag := (g_ShowHelpOnStart == "tip") ? " -TipOnly" : ""
+                Run(Format('alacritty.exe -e {1} -NoLogo -NoExit -ExecutionPolicy Bypass -File "{2}"{3}', configuredShell, welcomeScript, argFlag))
+
+                if (g_ShowHelpOnStart == "first-run" && g_FirstRun)
+                {
+                    g_FirstRun := false
+                    if (g_ConfigFile != "" && FileExist(g_ConfigFile))
+                        try IniWrite("false", g_ConfigFile, "General", "FirstRun")
+                }
+                return
             }
-            return
         }
+    }
+
+    ; Clean first-run flag if first-run was triggered on a non-PowerShell shell
+    if (g_FirstRun)
+    {
+        g_FirstRun := false
+        if (g_ConfigFile != "" && FileExist(g_ConfigFile))
+            try IniWrite("false", g_ConfigFile, "General", "FirstRun")
     }
 
     Run("alacritty.exe")
