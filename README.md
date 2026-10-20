@@ -64,9 +64,15 @@ Features mouse-aware multi-monitor detection, dynamic 2×2 quad grid tiling, acr
 
 ---
 
-## 📦 Prerequisites
+## 📦 Prerequisites (Optional for Automated Install)
 
-Run the following commands in PowerShell to install the prerequisites:
+> [!TIP]
+> **No dependencies required beforehand!**
+> You do **not** need to install any prerequisites before running the automated installer. The setup script (`.\install.ps1`) automatically inspects your machine, detects if Alacritty, AutoHotkey v2, or JetBrainsMono Nerd Font are missing, and offers to install them for you via `winget`.
+>
+> Only run the manual commands below if you prefer installing dependencies yourself or are performing a manual setup (Option B).
+
+If you prefer installing prerequisites manually, run the following in PowerShell:
 
 ```powershell
 # 1. Alacritty Terminal
@@ -84,6 +90,10 @@ winget install -e --id DEVCOM.JetBrainsMonoNerdFont
 ## ⚡ Quick Start
 
 ### Option A: Using the Automated Install Script (Recommended)
+
+> [!NOTE]
+> **Zero setup required beforehand:** Running `install.ps1` works immediately on a fresh Windows 11 machine without needing any pre-installed software—it will automatically detect, prompt for, and install all missing dependencies for you.
+
 Run PowerShell from inside the repository folder:
 
 ```powershell
