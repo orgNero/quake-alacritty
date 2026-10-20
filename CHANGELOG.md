@@ -7,6 +7,34 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.11.0] - 2026-10-20
+
+## Features
+### Major
+_None_
+### Minor
+- **Environment Diagnostics Helper (quake-env)**: Added quake-env command to welcome.ps1 and PowerShell $PROFILE integration. Inspects Windows 11 build, AutoHotkey v2 version, Alacritty version, and multi-monitor setup (resolutions and primary monitor), formats the output in clean GitHub-flavored Markdown, and automatically copies it to the system clipboard.
+- **Frictionless Bug Report Issue Template (.github/ISSUE_TEMPLATE/bug_report.md)**: Embedded a quick one-liner and quake-env instructions under the ## Environment section of the GitHub bug report template, enabling users to generate and paste complete diagnostics in seconds.
+
+## Fixes
+### Major
+_None_
+### Minor
+_None_
+
+## Window Management & Multi-Monitor
+_None_
+
+## Styling & Appearance
+_None_
+
+## Configuration & Tooling
+- Registered quake-env function alongside quake-help in install.ps1.
+- Updated uninstall.ps1 to cleanly remove both quake-help and quake-env registrations from $PROFILE.
+- Updated in-repo documentation in README.md.
+
+---
+
 ## [0.10.0] - 2026-10-20
 
 ## Features

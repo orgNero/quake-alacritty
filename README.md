@@ -40,7 +40,7 @@ Features mouse-aware multi-monitor detection, dynamic 2×2 quad grid tiling, acr
 * **Auto-Rebalancing & Transitions (`Alt + W`):** Closing any terminal automatically collapses and re-tiles the remaining ones. Closing a stacked split preserves the remaining terminal on its half-screen column without snapping to full-width visor.
 * **Keyboard Pane Navigation (`Alt + Arrows`):** Hop typing focus between splits without touching the mouse, featuring deterministic tie-breaking across asymmetrical master layouts.
 * **Window Swapping & Rotation (`Alt + Shift + Arrows`, `Alt + Shift + Space`):** Rearrange panes on the fly by swapping with adjacent windows or rotating all positions cyclically without losing keyboard focus.
-* **In-Terminal Startup Help Hint & Cheat Sheet (`quake-help`):** Displays a sleek 1-line reminder (`💡 Tip: Type 'quake-help' to view keyboard shortcuts`) on every terminal start. Configurable via `ShowHelpOnStart=tip` in `config.ini` (`tip` for sleek 1-line hint, `banner` for full 20-line table, `none` for silent startup). Running `quake-help` displays the full electric cyan quickstart cheat sheet on demand anytime.
+* **In-Terminal Startup Help Hint & Cheat Sheet (`quake-help`, `quake-env`):** Displays a sleek 1-line reminder (`💡 Tip: Type 'quake-help' to view keyboard shortcuts`) on every terminal start. Configurable via `ShowHelpOnStart=tip` in `config.ini` (`tip` for sleek 1-line hint, `banner` for full 20-line table, `none` for silent startup). Running `quake-help` displays the full electric cyan quickstart cheat sheet on demand anytime, while `quake-env` inspects your setup (OS, AutoHotkey, Alacritty, displays) and copies formatted Markdown to the clipboard for rapid bug reporting.
 * **Taskbar Awareness:** Respects custom work areas (such as left-docked taskbars) using `MonitorGetWorkArea`.
 
 ---
@@ -237,7 +237,7 @@ powershell -ExecutionPolicy Bypass -File "$env:APPDATA\alacritty\uninstall.ps1"
 The uninstaller:
 - Terminates running Quake Alacritty background processes.
 - Removes the Windows Startup shortcut.
-- Cleans up the `quake-help` command from your PowerShell `$PROFILE`.
+- Cleans up the `quake-help` and `quake-env` commands from your PowerShell `$PROFILE`.
 - Removes deployed application files while giving you the option to keep or delete your custom configuration files (`config.ini` and `alacritty.toml`).
 
 ---
