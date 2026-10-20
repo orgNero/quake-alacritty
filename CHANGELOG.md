@@ -7,6 +7,29 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.8.0] - 2026-10-20
+
+## Features
+### Major
+- **50/50 Full-Screen Horizontal Split (`TwoPaneLayout=top-bottom`)**: Added full-screen 50/50 horizontal dual-pane tiling with two 100% width panes stacked top and bottom with a pixel-perfect click-through horizontal divider seam.
+### Minor
+- **5-Mode 2-Pane Live Layout Cycling (`Alt + L`)**: Seamlessly integrated `top-bottom` into dynamic layout rotation (`side-by-side-visor` -> `side-by-side-full` -> `top-bottom` -> `left-stacked` -> `right-stacked`).
+- **Smooth 2<->3 Pane Spawn and Despawn Transitions**: Spawning a 3rd pane (`Alt + Enter`) from `top-bottom` smoothly transitions into `top` master orientation without jarring window reordering; closing a pane from `top` or `bottom` 3-pane layouts automatically collapses into `top-bottom`.
+
+## Fixes
+_None_
+
+## Window Management & Multi-Monitor
+- Symmetrical horizontal work area division (`MonitorGetWorkArea`) maintaining exact DPI scale and click-through seam overlay alignment for horizontal splits.
+
+## Styling & Appearance
+_None_
+
+## Configuration & Tooling
+- **Configuration Option in `config.ini`**: Added `top-bottom` (with aliases `horizontal-full` and `horizontal`) to `[Appearance] TwoPaneLayout`.
+
+---
+
 ## [Unreleased]
 
 ## Features

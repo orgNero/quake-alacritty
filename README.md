@@ -20,9 +20,10 @@ Features mouse-aware multi-monitor detection, dynamic 2×2 quad grid tiling, acr
   * **Display Topology Safety:** Automatically detects monitor disconnects and resolution shifts (`WM_DISPLAYCHANGE`), safely migrating any orphaned terminals to your primary display without losing session states.
 * **Smart Dynamic Multi-Pane Tiling (`Alt + Enter`, `Alt + L`):**
   * **1 Terminal:** Top visor (100% width, 40% height) or side half-screen column (50% width, 100% height).
-  * **2 Terminals:** 4 flexible modes cycled live via `Alt + L`:
+  * **2 Terminals:** 5 flexible modes cycled live via `Alt + L`:
     * `side-by-side-visor`: Top row side-by-side (50% / 50% width, 40% visor height).
     * `side-by-side-full`: 2 full-height columns (50% / 50% width, 100% height).
+    * `top-bottom`: 2 full-width rows (100% width, 50% / 50% height horizontal split).
     * `left-stacked`: 2 vertically stacked panes on the Left half (50% width each), keeping the Right half open for background desktop apps.
     * `right-stacked`: 2 vertically stacked panes on the Right half (50% width each), keeping the Left half open for background desktop apps.
   * **3 Terminals:** 4 cardinal master orientations configured in `config.ini` and cycled via `Alt + L`:
@@ -136,9 +137,10 @@ VisorHeightPercent=40
 ; right:  Right master pane (100% height), Left column 2 stacked panes
 TileLayout=bottom
 
-; 2-pane split mode (side-by-side-visor | side-by-side-full | left-stacked | right-stacked)
+; 2-pane split mode (side-by-side-visor | side-by-side-full | top-bottom | left-stacked | right-stacked)
 ; side-by-side-visor: 2 columns at VisorHeightPercent
 ; side-by-side-full:  2 columns at 100% work area height
+; top-bottom:         2 full-width rows (50%/50% height horizontal split)
 ; left-stacked:       2 stacked panes on Left half, desktop open on Right
 ; right-stacked:      2 stacked panes on Right half, desktop open on Left
 TwoPaneLayout=side-by-side-visor
