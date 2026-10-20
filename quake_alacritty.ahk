@@ -115,8 +115,8 @@ LoadConfig()
             g_TileLayout := tlVal
 
         tpVal := Trim(StrLower(IniRead(g_ConfigFile, "Appearance", "TwoPaneLayout", "side-by-side-visor")))
-        if (tpVal == "side-by-side-visor" || tpVal == "side-by-side-full" || tpVal == "left-stacked" || tpVal == "right-stacked")
-            g_TwoPaneLayout := tpVal
+        if (tpVal == "side-by-side-visor" || tpVal == "side-by-side-full" || tpVal == "top-bottom" || tpVal == "horizontal-full" || tpVal == "horizontal" || tpVal == "left-stacked" || tpVal == "right-stacked")
+            g_TwoPaneLayout := (tpVal == "horizontal-full" || tpVal == "horizontal") ? "top-bottom" : tpVal
     }
 
     ; 4. [Hotkeys]
@@ -727,7 +727,18 @@ TileAlacritty(targetMon := 0)
     ; -------------------------------------------------------------
     if (count == 2)
     {
-        if (curTwoPaneLayout == "left-stacked")
+        if (curTwoPaneLayout == "top-bottom" || curTwoPaneLayout == "horizontal-full" || curTwoPaneLayout == "horizontal")
+        {
+            availHeight := totalHeight - gap
+            h1 := Floor(availHeight / 2)
+            h2 := availHeight - h1
+
+            WinMove(wLeft, wTop, totalWidth, h1, "ahk_id " windows[1])
+            if (gap > 0)
+                CreateDivider(targetMon, wLeft, wTop + h1, totalWidth, gap, g_BorderColor)
+            WinMove(wLeft, wTop + h1 + gap, totalWidth, h2, "ahk_id " windows[2])
+        }
+        else if (curTwoPaneLayout == "left-stacked")
         {
             colW := Floor((totalWidth - gap) / 2)
             availHeight := totalHeight - gap
@@ -1263,6 +1274,8 @@ CycleLayout()
             if (curTP == "side-by-side-visor")
                 curTP := "side-by-side-full"
             else if (curTP == "side-by-side-full")
+                curTP := "top-bottom"
+            else if (curTP == "top-bottom")
                 curTP := "left-stacked"
             else if (curTP == "left-stacked")
                 curTP := "right-stacked"
@@ -1310,6 +1323,8 @@ CycleLayout()
             if (g_TwoPaneLayout == "side-by-side-visor")
                 g_TwoPaneLayout := "side-by-side-full"
             else if (g_TwoPaneLayout == "side-by-side-full")
+                g_TwoPaneLayout := "top-bottom"
+            else if (g_TwoPaneLayout == "top-bottom")
                 g_TwoPaneLayout := "left-stacked"
             else if (g_TwoPaneLayout == "left-stacked")
                 g_TwoPaneLayout := "right-stacked"
@@ -1641,6 +1656,12 @@ SpawnSplit()
                 if (monWindows.Length >= 2)
                     g_MonitorWindows[targetMon] := [newHwnd, monWindows[1], monWindows[2]]
             }
+            else if (curTP == "top-bottom")
+            {
+                SetMonTileLayout(targetMon, "top")
+                if (monWindows.Length >= 2)
+                    g_MonitorWindows[targetMon] := [monWindows[1], monWindows[2], newHwnd]
+            }
         }
 
         TileAlacritty(targetMon)
@@ -1679,6 +1700,12 @@ SpawnSplit()
                 g_TileLayout := "left"
                 if (allBefore.Length >= 2)
                     g_AlacrittyOrder := [newHwnd, allBefore[1], allBefore[2]]
+            }
+            else if (g_TwoPaneLayout == "top-bottom")
+            {
+                g_TileLayout := "top"
+                if (allBefore.Length >= 2)
+                    g_AlacrittyOrder := [allBefore[1], allBefore[2], newHwnd]
             }
         }
 
@@ -1750,6 +1777,8 @@ CloseSplit()
                 SetMonTwoPaneLayout(targetMon, "left-stacked")
             else if (curTL == "left")
                 SetMonTwoPaneLayout(targetMon, "right-stacked")
+            else if (curTL == "top" || curTL == "bottom")
+                SetMonTwoPaneLayout(targetMon, "top-bottom")
         }
 
         if (g_MonitorWindows[targetMon].Length > 0)
@@ -1789,6 +1818,8 @@ CloseSplit()
                 g_TwoPaneLayout := "left-stacked"
             else if (g_TileLayout == "left")
                 g_TwoPaneLayout := "right-stacked"
+            else if (g_TileLayout == "top" || g_TileLayout == "bottom")
+                g_TwoPaneLayout := "top-bottom"
         }
 
         TileAlacritty()
