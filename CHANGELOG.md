@@ -20,6 +20,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - **In-Terminal Cheat Sheet Synchronization (`welcome.ps1`)**: Added `Win + Shift + Left/Right` to the quickstart cheat sheet table and patched the `config.ini` parser to strip inline comments.
 
 ## Fixes
+### Major
+- **Multi-Monitor Swap Reversion Fix (`TileAlacritty`)**: Prevented `SyncMonitorWindows` from checking physical window positions and reverting array swaps before `WinMove` coordinates are applied during `MoveVisorDirection`.
+- **Windows OS Native Hotkey Suppression (`$#+Left` / `$#+Right`)**: Enforced low-level keyboard hook (`InstallKeybdHook`, `$`) on `#` modifier hotkeys to prevent Windows DWM / Explorer from natively hijacking `Win + Shift + Left / Right` and tearing individual windows.
+
 ### Minor
 - **Inline Comment Sanitization in Help Banner**: Fixed an issue where inline comments in `config.ini` (e.g. `ToggleVisor=#sc029 ; Win + §`) were erroneously parsed as modifier tokens by `welcome.ps1`.
 
