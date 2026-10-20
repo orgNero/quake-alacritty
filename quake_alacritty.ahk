@@ -13,7 +13,7 @@ global g_ConfigFile         := ""
 global g_BorderGap          := 2
 global g_BorderColor        := "38bdf8"
 global g_VisorHeightPercent := 0.40
-global g_MultiMonitorMode   := "hopping"
+global g_MultiMonitorMode   := "isolated"
 global g_FirstRun           := false
 
 ; Layout settings
@@ -39,8 +39,16 @@ global g_KeyRotate          := "!+Space"
 global g_KeyReload          := "!^r"
 
 ; Window & Divider trackers
+; Hopping mode legacy single-pool tracker
 global g_AlacrittyOrder     := []
 global g_Dividers           := []
+
+; Isolated per-monitor trackers
+global g_MonitorWindows        := Map()  ; monId (int) -> Array of HWNDs
+global g_MonitorDividers       := Map()  ; monId (int) -> Array of Gui objects
+global g_MonitorTileLayout     := Map()  ; monId (int) -> string ("bottom", "top", "left", "right")
+global g_MonitorTwoPaneLayout  := Map()  ; monId (int) -> string ("side-by-side-visor", ...)
+global g_MonitorSinglePaneSide := Map()  ; monId (int) -> string ("", "left", "right")
 
 ; Helper: Resolves configuration file location and loads user preferences
 LoadConfig()
@@ -70,7 +78,11 @@ LoadConfig()
     try {
         frVal := IniRead(g_ConfigFile, "General", "FirstRun", "false")
         g_FirstRun := (frVal = "true" || frVal = "1")
-        g_MultiMonitorMode := IniRead(g_ConfigFile, "General", "MultiMonitorMode", "hopping")
+        modeVal := Trim(StrLower(IniRead(g_ConfigFile, "General", "MultiMonitorMode", "isolated")))
+        if (modeVal == "hopping" || modeVal == "isolated")
+            g_MultiMonitorMode := modeVal
+        else
+            g_MultiMonitorMode := "isolated"
     }
 
     ; 3. [Appearance]
@@ -157,33 +169,131 @@ RegisterKey(keyName, callback)
     }
 }
 
-; Initialize configuration and register hotkeys
-LoadConfig()
-RegisterHotkeys()
-A_IconTip := "Quake Alacritty"
 
-
-; Helper: Clears and destroys active divider lines
-ClearDividers()
+; -------------------------------------------------------------
+; Layout Getters & Setters per Monitor
+; -------------------------------------------------------------
+GetMonTileLayout(mon)
 {
-    global g_Dividers
-    for div in g_Dividers
-    {
-        try div.Destroy()
-    }
-    g_Dividers := []
+    global g_TileLayout, g_MonitorTileLayout
+    if (g_MonitorTileLayout.Has(mon))
+        return g_MonitorTileLayout[mon]
+    return g_TileLayout
 }
 
-; Helper: Creates a click-through divider line
-CreateDivider(x, y, w, h, color)
+SetMonTileLayout(mon, val)
 {
-    global g_Dividers
+    global g_MonitorTileLayout, g_TileLayout
+    g_MonitorTileLayout[mon] := val
+    g_TileLayout := val
+}
+
+GetMonTwoPaneLayout(mon)
+{
+    global g_TwoPaneLayout, g_MonitorTwoPaneLayout
+    if (g_MonitorTwoPaneLayout.Has(mon))
+        return g_MonitorTwoPaneLayout[mon]
+    return g_TwoPaneLayout
+}
+
+SetMonTwoPaneLayout(mon, val)
+{
+    global g_MonitorTwoPaneLayout, g_TwoPaneLayout
+    g_MonitorTwoPaneLayout[mon] := val
+    g_TwoPaneLayout := val
+}
+
+GetMonSinglePaneSide(mon)
+{
+    global g_SinglePaneSide, g_MonitorSinglePaneSide
+    if (g_MonitorSinglePaneSide.Has(mon))
+        return g_MonitorSinglePaneSide[mon]
+    return g_SinglePaneSide
+}
+
+SetMonSinglePaneSide(mon, val)
+{
+    global g_MonitorSinglePaneSide, g_SinglePaneSide
+    g_MonitorSinglePaneSide[mon] := val
+    g_SinglePaneSide := val
+}
+
+
+; -------------------------------------------------------------
+; Dividers Management
+; -------------------------------------------------------------
+
+; Helper: Clears and destroys active divider lines (for specific monitor or all monitors)
+ClearDividers(mon := 0)
+{
+    global g_MonitorDividers, g_Dividers
+    if (mon != 0)
+    {
+        if (g_MonitorDividers.Has(mon))
+        {
+            for div in g_MonitorDividers[mon]
+            {
+                try div.Destroy()
+            }
+            g_MonitorDividers[mon] := []
+        }
+    }
+    else
+    {
+        for mId, divList in g_MonitorDividers
+        {
+            for div in divList
+            {
+                try div.Destroy()
+            }
+        }
+        g_MonitorDividers := Map()
+
+        for div in g_Dividers
+        {
+            try div.Destroy()
+        }
+        g_Dividers := []
+    }
+}
+
+; Helper: Creates a click-through divider line tracked per monitor
+CreateDivider(arg1, arg2, arg3, arg4, arg5, arg6 := "")
+{
+    global g_MonitorDividers, g_Dividers
+    if (arg6 != "")
+    {
+        mon   := arg1
+        x     := arg2
+        y     := arg3
+        w     := arg4
+        h     := arg5
+        color := arg6
+    }
+    else
+    {
+        mon   := 0
+        x     := arg1
+        y     := arg2
+        w     := arg3
+        h     := arg4
+        color := arg5
+    }
+
     ; +AlwaysOnTop, -Caption, +ToolWindow, +E0x20 (click-through WS_EX_TRANSPARENT), -DPIScale (pixel-accurate)
     div := Gui("+AlwaysOnTop -Caption +ToolWindow +E0x20 -DPIScale")
     div.BackColor := color
     div.Show(Format("x{1} y{2} w{3} h{4} NoActivate", x, y, w, h))
-    g_Dividers.Push(div)
+
+    if (!g_MonitorDividers.Has(mon))
+        g_MonitorDividers[mon] := []
+    g_MonitorDividers[mon].Push(div)
 }
+
+
+; -------------------------------------------------------------
+; Window Discovery & Synchronization
+; -------------------------------------------------------------
 
 ; Helper: Filters out ghost/helper windows and only keeps true terminal windows
 GetAlacrittyWindows()
@@ -208,7 +318,7 @@ GetAlacrittyWindows()
     return realList
 }
 
-; Helper: Maintains a stable window ordering so existing splits don't jump around
+; Helper: Maintains a stable window ordering in hopping mode so splits don't jump around
 SyncWindowOrder(realWindows)
 {
     global g_AlacrittyOrder
@@ -273,6 +383,174 @@ SyncWindowOrder(realWindows)
     return g_AlacrittyOrder
 }
 
+; Helper: Maintains per-monitor window partitioning for isolated workspaces
+SyncMonitorWindows(targetMon := 0)
+{
+    global g_MultiMonitorMode, g_MonitorWindows, g_AlacrittyOrder
+    DetectHiddenWindows true
+    realWindows := GetAlacrittyWindows()
+
+    if (g_MultiMonitorMode == "hopping")
+    {
+        SyncWindowOrder(realWindows)
+        return
+    }
+
+    monCount := MonitorGetCount()
+    Loop monCount {
+        if (!g_MonitorWindows.Has(A_Index))
+            g_MonitorWindows[A_Index] := []
+    }
+
+    ; 1. Prune dead windows and detect visible windows moved by user across monitors
+    movedWindows := []
+    for monId, winList in g_MonitorWindows
+    {
+        prunedList := []
+        for hwnd in winList
+        {
+            isAlive := false
+            for realHwnd in realWindows
+            {
+                if (hwnd == realHwnd)
+                {
+                    isAlive := true
+                    break
+                }
+            }
+            if (!isAlive)
+                continue
+
+            ; If window is visible, check if user dragged it to another monitor
+            if (DllCall("IsWindowVisible", "Ptr", hwnd))
+            {
+                actualMon := GetWindowMonitor(hwnd)
+                if (actualMon != 0 && actualMon != monId && actualMon <= monCount)
+                {
+                    movedWindows.Push({ hwnd: hwnd, toMon: actualMon })
+                    continue
+                }
+            }
+
+            prunedList.Push(hwnd)
+        }
+        g_MonitorWindows[monId] := prunedList
+    }
+
+    ; Re-assign moved windows
+    for item in movedWindows
+    {
+        if (!g_MonitorWindows.Has(item.toMon))
+            g_MonitorWindows[item.toMon] := []
+        g_MonitorWindows[item.toMon].Push(item.hwnd)
+    }
+
+    ; 2. Identify untracked windows
+    untracked := []
+    for realHwnd in realWindows
+    {
+        isTracked := false
+        for monId, winList in g_MonitorWindows
+        {
+            for hwnd in winList
+            {
+                if (hwnd == realHwnd)
+                {
+                    isTracked := true
+                    break 2
+                }
+            }
+        }
+        if (!isTracked)
+            untracked.Push(realHwnd)
+    }
+
+    ; 3. Assign untracked windows
+    for hwnd in untracked
+    {
+        destMon := 0
+        if (targetMon != 0 && targetMon <= monCount)
+        {
+            destMon := targetMon
+        }
+        else
+        {
+            destMon := GetWindowMonitor(hwnd)
+            if (destMon == 0 || destMon > monCount)
+                destMon := GetMouseMonitor()
+        }
+
+        if (destMon == 0 || destMon > monCount)
+            destMon := MonitorGetPrimary()
+
+        if (!g_MonitorWindows.Has(destMon))
+            g_MonitorWindows[destMon] := []
+
+        g_MonitorWindows[destMon].Push(hwnd)
+    }
+
+    ; 4. If a monitor had 0 windows and was assigned multiple untracked windows at once, sort spatially
+    for monId, winList in g_MonitorWindows
+    {
+        if (winList.Length > 1)
+        {
+            allUntracked := true
+            for hwnd in winList
+            {
+                wasInUntracked := false
+                for uHwnd in untracked
+                {
+                    if (hwnd == uHwnd)
+                    {
+                        wasInUntracked := true
+                        break
+                    }
+                }
+                if (!wasInUntracked)
+                {
+                    allUntracked := false
+                    break
+                }
+            }
+
+            if (allUntracked)
+            {
+                n := winList.Length
+                Loop n {
+                    i := A_Index
+                    Loop n - i {
+                        j := A_Index
+                        try {
+                            WinGetPos(&x1, &y1,,, "ahk_id " winList[j])
+                            WinGetPos(&x2, &y2,,, "ahk_id " winList[j+1])
+                            if (y1 > y2 + 60 || (Abs(y1 - y2) <= 60 && x1 > x2)) {
+                                temp := winList[j]
+                                winList[j] := winList[j+1]
+                                winList[j+1] := temp
+                            }
+                        }
+                    }
+                }
+                g_MonitorWindows[monId] := winList
+            }
+        }
+    }
+}
+
+; Helper: Checks if any window belonging to a monitor is currently visible
+IsMonitorVisible(mon)
+{
+    global g_MonitorWindows
+    if (!g_MonitorWindows.Has(mon))
+        return false
+    for hwnd in g_MonitorWindows[mon]
+    {
+        if (WinExist("ahk_id " hwnd) && DllCall("IsWindowVisible", "Ptr", hwnd))
+            return true
+    }
+    return false
+}
+
 ; Helper: Determines which monitor contains a given window
 GetWindowMonitor(hwnd)
 {
@@ -312,6 +590,11 @@ GetMouseMonitor()
     return MonitorGetPrimary()
 }
 
+
+; -------------------------------------------------------------
+; Window Tiling Engine
+; -------------------------------------------------------------
+
 ; Helper: Tiles Alacritty windows dynamically:
 ; 1 window:  Top 100% width, 40% height (or 50% width full-height if positioned left/right)
 ; 2 windows: Configurable 2-pane mode (side-by-side visor/full, left-stacked, right-stacked)
@@ -319,37 +602,75 @@ GetMouseMonitor()
 ; 4 windows: Top 50% / 50% width, Bottom 50% / 50% width (2x2 Quad, cyan cross seams)
 TileAlacritty(targetMon := 0)
 {
-    global g_BorderGap, g_BorderColor, g_VisorHeightPercent, g_TileLayout, g_TwoPaneLayout, g_SinglePaneSide
+    global g_BorderGap, g_BorderColor, g_VisorHeightPercent
+    global g_TileLayout, g_TwoPaneLayout, g_SinglePaneSide
+    global g_MultiMonitorMode, g_MonitorWindows, g_AlacrittyOrder
     DetectHiddenWindows true
-    realWindows := GetAlacrittyWindows()
-    count := realWindows.Length
-    if (count == 0)
-    {
-        ClearDividers()
-        return
-    }
 
-    ClearDividers()
-    windows := SyncWindowOrder(realWindows)
-
-    if (targetMon == 0)
+    if (g_MultiMonitorMode == "isolated")
     {
-        ; If any terminal window is already visible, keep it on its current monitor
-        for hwnd in windows
+        if (targetMon == 0)
         {
-            if DllCall("IsWindowVisible", "Ptr", hwnd)
+            activeHwnd := WinActive("A")
+            if (activeHwnd)
+                targetMon := GetWindowMonitor(activeHwnd)
+            if (targetMon == 0)
+                targetMon := GetMouseMonitor()
+        }
+
+        SyncMonitorWindows(targetMon)
+
+        if (!g_MonitorWindows.Has(targetMon))
+            g_MonitorWindows[targetMon] := []
+
+        windows := g_MonitorWindows[targetMon]
+        count := windows.Length
+        if (count == 0)
+        {
+            ClearDividers(targetMon)
+            return
+        }
+
+        ClearDividers(targetMon)
+
+        curTileLayout     := GetMonTileLayout(targetMon)
+        curTwoPaneLayout  := GetMonTwoPaneLayout(targetMon)
+        curSinglePaneSide := GetMonSinglePaneSide(targetMon)
+    }
+    else ; "hopping" mode
+    {
+        realWindows := GetAlacrittyWindows()
+        count := realWindows.Length
+        if (count == 0)
+        {
+            ClearDividers(0)
+            return
+        }
+
+        ClearDividers(0)
+        windows := SyncWindowOrder(realWindows)
+
+        if (targetMon == 0)
+        {
+            for hwnd in windows
             {
-                mon := GetWindowMonitor(hwnd)
-                if (mon)
+                if DllCall("IsWindowVisible", "Ptr", hwnd)
                 {
-                    targetMon := mon
-                    break
+                    mon := GetWindowMonitor(hwnd)
+                    if (mon)
+                    {
+                        targetMon := mon
+                        break
+                    }
                 }
             }
+            if (targetMon == 0)
+                targetMon := GetMouseMonitor()
         }
-        ; Otherwise, place it where the mouse cursor is
-        if (targetMon == 0)
-            targetMon := GetMouseMonitor()
+
+        curTileLayout     := g_TileLayout
+        curTwoPaneLayout  := g_TwoPaneLayout
+        curSinglePaneSide := g_SinglePaneSide
     }
 
     ; 1. Show all windows and set on top
@@ -371,12 +692,12 @@ TileAlacritty(targetMon := 0)
     if (count == 1)
     {
         hwnd := windows[1]
-        if (g_SinglePaneSide == "left")
+        if (curSinglePaneSide == "left")
         {
             thisW := Floor((totalWidth - gap) / 2)
             WinMove(wLeft, wTop, thisW, totalHeight, "ahk_id " hwnd)
         }
-        else if (g_SinglePaneSide == "right")
+        else if (curSinglePaneSide == "right")
         {
             thisW := Floor((totalWidth - gap) / 2)
             currentX := wLeft + totalWidth - thisW
@@ -395,7 +716,7 @@ TileAlacritty(targetMon := 0)
     ; -------------------------------------------------------------
     if (count == 2)
     {
-        if (g_TwoPaneLayout == "left-stacked")
+        if (curTwoPaneLayout == "left-stacked")
         {
             colW := Floor((totalWidth - gap) / 2)
             availHeight := totalHeight - gap
@@ -404,10 +725,10 @@ TileAlacritty(targetMon := 0)
 
             WinMove(wLeft, wTop, colW, h1, "ahk_id " windows[1])
             if (gap > 0)
-                CreateDivider(wLeft, wTop + h1, colW, gap, g_BorderColor)
+                CreateDivider(targetMon, wLeft, wTop + h1, colW, gap, g_BorderColor)
             WinMove(wLeft, wTop + h1 + gap, colW, h2, "ahk_id " windows[2])
         }
-        else if (g_TwoPaneLayout == "right-stacked")
+        else if (curTwoPaneLayout == "right-stacked")
         {
             colW := Floor((totalWidth - gap) / 2)
             leftX := wLeft + totalWidth - colW
@@ -417,19 +738,19 @@ TileAlacritty(targetMon := 0)
 
             WinMove(leftX, wTop, colW, h1, "ahk_id " windows[1])
             if (gap > 0)
-                CreateDivider(leftX, wTop + h1, colW, gap, g_BorderColor)
+                CreateDivider(targetMon, leftX, wTop + h1, colW, gap, g_BorderColor)
             WinMove(leftX, wTop + h1 + gap, colW, h2, "ahk_id " windows[2])
         }
         else ; "side-by-side-visor" or "side-by-side-full"
         {
-            paneHeight := (g_TwoPaneLayout == "side-by-side-full") ? totalHeight : Floor(totalHeight * g_VisorHeightPercent)
+            paneHeight := (curTwoPaneLayout == "side-by-side-full") ? totalHeight : Floor(totalHeight * g_VisorHeightPercent)
             availWidth := totalWidth - gap
             col1W := Floor(availWidth / 2)
             col2W := availWidth - col1W
 
             WinMove(wLeft, wTop, col1W, paneHeight, "ahk_id " windows[1])
             if (gap > 0)
-                CreateDivider(wLeft + col1W, wTop, gap, paneHeight, g_BorderColor)
+                CreateDivider(targetMon, wLeft + col1W, wTop, gap, paneHeight, g_BorderColor)
             WinMove(wLeft + col1W + gap, wTop, col2W, paneHeight, "ahk_id " windows[2])
         }
         return
@@ -440,7 +761,7 @@ TileAlacritty(targetMon := 0)
     ; -------------------------------------------------------------
     if (count == 3)
     {
-        if (g_TileLayout == "top")
+        if (curTileLayout == "top")
         {
             ; Top-Master: 1 top pane (100% width), 2 bottom panes (50%/50% width)
             availHeight := totalHeight - gap
@@ -457,19 +778,19 @@ TileAlacritty(targetMon := 0)
 
             ; Full-width horizontal divider
             if (gap > 0)
-                CreateDivider(wLeft, wTop + topHeight, totalWidth, gap, g_BorderColor)
+                CreateDivider(targetMon, wLeft, wTop + topHeight, totalWidth, gap, g_BorderColor)
 
             ; Window 2: Bottom-Left
             WinMove(wLeft, botY, bot1W, botHeight, "ahk_id " windows[2])
 
             ; Bottom vertical divider
             if (gap > 0)
-                CreateDivider(wLeft + bot1W, botY, gap, botHeight, g_BorderColor)
+                CreateDivider(targetMon, wLeft + bot1W, botY, gap, botHeight, g_BorderColor)
 
             ; Window 3: Bottom-Right
             WinMove(wLeft + bot1W + gap, botY, bot2W, botHeight, "ahk_id " windows[3])
         }
-        else if (g_TileLayout == "left")
+        else if (curTileLayout == "left")
         {
             ; Left-Master: Left pane 100% height, Right column 2 stacked panes
             availWidth  := totalWidth - gap
@@ -486,19 +807,19 @@ TileAlacritty(targetMon := 0)
 
             ; Full-height vertical divider
             if (gap > 0)
-                CreateDivider(wLeft + masterWidth, wTop, gap, totalHeight, g_BorderColor)
+                CreateDivider(targetMon, wLeft + masterWidth, wTop, gap, totalHeight, g_BorderColor)
 
             ; Window 2: Top-Right
             WinMove(rightX, wTop, rightWidth, h1, "ahk_id " windows[2])
 
             ; Horizontal divider in right column
             if (gap > 0)
-                CreateDivider(rightX, wTop + h1, rightWidth, gap, g_BorderColor)
+                CreateDivider(targetMon, rightX, wTop + h1, rightWidth, gap, g_BorderColor)
 
             ; Window 3: Bottom-Right
             WinMove(rightX, wTop + h1 + gap, rightWidth, h2, "ahk_id " windows[3])
         }
-        else if (g_TileLayout == "right")
+        else if (curTileLayout == "right")
         {
             ; Right-Master: Right pane 100% height, Left column 2 stacked panes
             ; Reading order: [1: Top-Left, 2: Right-Master, 3: Bottom-Left]
@@ -516,14 +837,14 @@ TileAlacritty(targetMon := 0)
 
             ; Horizontal divider in left column
             if (gap > 0)
-                CreateDivider(wLeft, wTop + h1, leftWidth, gap, g_BorderColor)
+                CreateDivider(targetMon, wLeft, wTop + h1, leftWidth, gap, g_BorderColor)
 
             ; Window 3: Bottom-Left
             WinMove(wLeft, wTop + h1 + gap, leftWidth, h2, "ahk_id " windows[3])
 
             ; Full-height vertical divider
             if (gap > 0)
-                CreateDivider(wLeft + leftWidth, wTop, gap, totalHeight, g_BorderColor)
+                CreateDivider(targetMon, wLeft + leftWidth, wTop, gap, totalHeight, g_BorderColor)
 
             ; Window 2: Right Master (100% height)
             WinMove(rightX, wTop, masterWidth, totalHeight, "ahk_id " windows[2])
@@ -545,14 +866,14 @@ TileAlacritty(targetMon := 0)
 
             ; Top vertical divider
             if (gap > 0)
-                CreateDivider(wLeft + top1W, wTop, gap, topHeight, g_BorderColor)
+                CreateDivider(targetMon, wLeft + top1W, wTop, gap, topHeight, g_BorderColor)
 
             ; Window 2: Top-Right
             WinMove(wLeft + top1W + gap, wTop, top2W, topHeight, "ahk_id " windows[2])
 
             ; Full-width horizontal divider
             if (gap > 0)
-                CreateDivider(wLeft, wTop + topHeight, totalWidth, gap, g_BorderColor)
+                CreateDivider(targetMon, wLeft, wTop + topHeight, totalWidth, gap, g_BorderColor)
 
             ; Window 3: Bottom Master (100% width)
             WinMove(wLeft, botY, totalWidth, botHeight, "ahk_id " windows[3])
@@ -584,7 +905,7 @@ TileAlacritty(targetMon := 0)
 
         if (idx < topCount && gap > 0)
         {
-            CreateDivider(currentX, wTop, gap, topHeight, g_BorderColor)
+            CreateDivider(targetMon, currentX, wTop, gap, topHeight, g_BorderColor)
             currentX += gap
         }
     }
@@ -594,7 +915,7 @@ TileAlacritty(targetMon := 0)
     {
         ; Horizontal divider between top and bottom rows
         if (gap > 0)
-            CreateDivider(wLeft, wTop + topHeight, totalWidth, gap, g_BorderColor)
+            CreateDivider(targetMon, wLeft, wTop + topHeight, totalWidth, gap, g_BorderColor)
 
         botAvailWidth   := totalWidth - ((botCount - 1) * gap)
         baseBotColWidth := Floor(botAvailWidth / botCount)
@@ -608,22 +929,42 @@ TileAlacritty(targetMon := 0)
 
             if (idx < botCount && gap > 0)
             {
-                CreateDivider(currentX, botY, gap, botHeight, g_BorderColor)
+                CreateDivider(targetMon, currentX, botY, gap, botHeight, g_BorderColor)
                 currentX += gap
             }
         }
     }
 }
 
+
+; -------------------------------------------------------------
+; Keyboard Navigation & Swapping
+; -------------------------------------------------------------
+
 ; Helper: Switch keyboard typing focus between splits using directional keys
 FocusDirection(dir)
 {
+    global g_MultiMonitorMode, g_MonitorWindows
     activeHwnd := WinActive("A")
     if (!activeHwnd)
         return
 
-    realWindows := GetAlacrittyWindows()
-    if (realWindows.Length <= 1)
+    targetMon := GetWindowMonitor(activeHwnd)
+    if (targetMon == 0)
+        targetMon := GetMouseMonitor()
+
+    candidateWindows := []
+    if (g_MultiMonitorMode == "isolated")
+    {
+        if (g_MonitorWindows.Has(targetMon))
+            candidateWindows := g_MonitorWindows[targetMon]
+    }
+    else
+    {
+        candidateWindows := GetAlacrittyWindows()
+    }
+
+    if (candidateWindows.Length <= 1)
         return
 
     WinGetPos(&ax, &ay, &aw, &ah, "ahk_id " activeHwnd)
@@ -635,9 +976,9 @@ FocusDirection(dir)
     bestTcx  := 0
     bestTcy  := 0
 
-    for hwnd in realWindows
+    for hwnd in candidateWindows
     {
-        if (hwnd == activeHwnd)
+        if (hwnd == activeHwnd || !WinExist("ahk_id " hwnd))
             continue
 
         WinGetPos(&tx, &ty, &tw, &th, "ahk_id " hwnd)
@@ -657,7 +998,7 @@ FocusDirection(dir)
         if (valid)
         {
             dist := (tcx - acx)**2 + (tcy - acy)**2
-            ; Tie-breaking for equidistant targets (e.g. Master pane navigating to 2 stacked panes):
+            ; Tie-breaking for equidistant targets:
             ; For horizontal navigation (left/right), prefer higher up (smaller tcy).
             ; For vertical navigation (up/down), prefer further left (smaller tcx).
             isBetter := false
@@ -688,17 +1029,30 @@ FocusDirection(dir)
 ; Helper: Swap position of active terminal with adjacent terminal in given direction
 SwapDirection(dir)
 {
+    global g_MultiMonitorMode, g_MonitorWindows, g_AlacrittyOrder
     activeHwnd := WinActive("A")
     if (!activeHwnd)
         return
 
-    realWindows := GetAlacrittyWindows()
-    if (realWindows.Length <= 1)
-        return
+    targetMon := GetWindowMonitor(activeHwnd)
+    if (targetMon == 0)
+        targetMon := GetMouseMonitor()
 
-    ; Ensure g_AlacrittyOrder is synchronized with current live windows
-    global g_AlacrittyOrder
-    SyncWindowOrder(realWindows)
+    candidateWindows := []
+    if (g_MultiMonitorMode == "isolated")
+    {
+        SyncMonitorWindows(targetMon)
+        if (g_MonitorWindows.Has(targetMon))
+            candidateWindows := g_MonitorWindows[targetMon]
+    }
+    else
+    {
+        candidateWindows := GetAlacrittyWindows()
+        SyncWindowOrder(candidateWindows)
+    }
+
+    if (candidateWindows.Length <= 1)
+        return
 
     WinGetPos(&ax, &ay, &aw, &ah, "ahk_id " activeHwnd)
     acx := ax + (aw / 2)
@@ -709,9 +1063,9 @@ SwapDirection(dir)
     bestTcx  := 0
     bestTcy  := 0
 
-    for hwnd in realWindows
+    for hwnd in candidateWindows
     {
-        if (hwnd == activeHwnd)
+        if (hwnd == activeHwnd || !WinExist("ahk_id " hwnd))
             continue
 
         WinGetPos(&tx, &ty, &tw, &th, "ahk_id " hwnd)
@@ -731,8 +1085,6 @@ SwapDirection(dir)
         if (valid)
         {
             dist := (tcx - acx)**2 + (tcy - acy)**2
-            ; Tie-breaker: If distances are almost equal (within 100px difference),
-            ; prefer the window further to the left (smaller tcx) or higher up (smaller tcy)
             isBetter := false
             if (dist < bestDist - 100)
                 isBetter := true
@@ -757,111 +1109,220 @@ SwapDirection(dir)
     if (!bestHwnd)
         return
 
-    ; Swap activeHwnd and bestHwnd inside g_AlacrittyOrder
-    idxActive := 0
-    idxTarget := 0
-
-    for idx, hwnd in g_AlacrittyOrder
+    if (g_MultiMonitorMode == "isolated")
     {
-        if (hwnd == activeHwnd)
-            idxActive := idx
-        else if (hwnd == bestHwnd)
-            idxTarget := idx
+        orderList := g_MonitorWindows[targetMon]
+        idxActive := 0
+        idxTarget := 0
+        for idx, hwnd in orderList
+        {
+            if (hwnd == activeHwnd)
+                idxActive := idx
+            else if (hwnd == bestHwnd)
+                idxTarget := idx
+        }
+
+        if (idxActive && idxTarget)
+        {
+            orderList[idxActive] := bestHwnd
+            orderList[idxTarget] := activeHwnd
+            g_MonitorWindows[targetMon] := orderList
+
+            TileAlacritty(targetMon)
+            WinActivate("ahk_id " activeHwnd)
+        }
     }
-
-    if (idxActive && idxTarget)
+    else
     {
-        g_AlacrittyOrder[idxActive] := bestHwnd
-        g_AlacrittyOrder[idxTarget] := activeHwnd
+        idxActive := 0
+        idxTarget := 0
+        for idx, hwnd in g_AlacrittyOrder
+        {
+            if (hwnd == activeHwnd)
+                idxActive := idx
+            else if (hwnd == bestHwnd)
+                idxTarget := idx
+        }
 
-        TileAlacritty()
-        WinActivate("ahk_id " activeHwnd)
+        if (idxActive && idxTarget)
+        {
+            g_AlacrittyOrder[idxActive] := bestHwnd
+            g_AlacrittyOrder[idxTarget] := activeHwnd
+
+            TileAlacritty(targetMon)
+            WinActivate("ahk_id " activeHwnd)
+        }
     }
 }
 
 ; Helper: Rotate all terminal pane positions cyclically
 RotateWindows(clockwise := true)
 {
+    global g_MultiMonitorMode, g_MonitorWindows, g_AlacrittyOrder
     activeHwnd := WinActive("A")
     if (!activeHwnd)
         return
 
-    realWindows := GetAlacrittyWindows()
-    if (realWindows.Length <= 1)
-        return
+    targetMon := GetWindowMonitor(activeHwnd)
+    if (targetMon == 0)
+        targetMon := GetMouseMonitor()
 
-    global g_AlacrittyOrder
-    SyncWindowOrder(realWindows)
-
-    if (g_AlacrittyOrder.Length <= 1)
-        return
-
-    if (clockwise)
+    if (g_MultiMonitorMode == "isolated")
     {
-        ; Shift last item to the front
-        lastItem := g_AlacrittyOrder.Pop()
-        g_AlacrittyOrder.InsertAt(1, lastItem)
+        SyncMonitorWindows(targetMon)
+        if (!g_MonitorWindows.Has(targetMon) || g_MonitorWindows[targetMon].Length <= 1)
+            return
+
+        orderList := g_MonitorWindows[targetMon]
+        if (clockwise)
+        {
+            lastItem := orderList.Pop()
+            orderList.InsertAt(1, lastItem)
+        }
+        else
+        {
+            firstItem := orderList.RemoveAt(1)
+            orderList.Push(firstItem)
+        }
+        g_MonitorWindows[targetMon] := orderList
+
+        TileAlacritty(targetMon)
+        if (activeHwnd && WinExist("ahk_id " activeHwnd))
+            WinActivate("ahk_id " activeHwnd)
     }
     else
     {
-        ; Shift first item to the back
-        firstItem := g_AlacrittyOrder.RemoveAt(1)
-        g_AlacrittyOrder.Push(firstItem)
-    }
+        realWindows := GetAlacrittyWindows()
+        if (realWindows.Length <= 1)
+            return
 
-    TileAlacritty()
-    if (activeHwnd)
-        WinActivate("ahk_id " activeHwnd)
+        SyncWindowOrder(realWindows)
+        if (g_AlacrittyOrder.Length <= 1)
+            return
+
+        if (clockwise)
+        {
+            lastItem := g_AlacrittyOrder.Pop()
+            g_AlacrittyOrder.InsertAt(1, lastItem)
+        }
+        else
+        {
+            firstItem := g_AlacrittyOrder.RemoveAt(1)
+            g_AlacrittyOrder.Push(firstItem)
+        }
+
+        TileAlacritty(targetMon)
+        if (activeHwnd && WinExist("ahk_id " activeHwnd))
+            WinActivate("ahk_id " activeHwnd)
+    }
 }
 
 ; Helper: Cycles multi-pane terminal layouts live without editing config.ini
 CycleLayout()
 {
     global g_TileLayout, g_TwoPaneLayout, g_SinglePaneSide
+    global g_MultiMonitorMode, g_MonitorWindows
+
     activeHwnd := WinActive("A")
-    realWindows := GetAlacrittyWindows()
-    count := realWindows.Length
+    targetMon := activeHwnd ? GetWindowMonitor(activeHwnd) : 0
+    if (targetMon == 0)
+        targetMon := GetMouseMonitor()
 
-    if (count == 1)
+    if (g_MultiMonitorMode == "isolated")
     {
-        ; Cycle single-pane: full-width visor -> left-half full-height -> right-half full-height -> full-width visor
-        if (g_SinglePaneSide == "")
-            g_SinglePaneSide := "left"
-        else if (g_SinglePaneSide == "left")
-            g_SinglePaneSide := "right"
-        else
-            g_SinglePaneSide := ""
-    }
-    else if (count == 2)
-    {
-        ; Cycle 2-pane modes: side-by-side-visor -> side-by-side-full -> left-stacked -> right-stacked -> side-by-side-visor
-        if (g_TwoPaneLayout == "side-by-side-visor")
-            g_TwoPaneLayout := "side-by-side-full"
-        else if (g_TwoPaneLayout == "side-by-side-full")
-            g_TwoPaneLayout := "left-stacked"
-        else if (g_TwoPaneLayout == "left-stacked")
-            g_TwoPaneLayout := "right-stacked"
-        else
-            g_TwoPaneLayout := "side-by-side-visor"
+        SyncMonitorWindows(targetMon)
+        windows := g_MonitorWindows.Has(targetMon) ? g_MonitorWindows[targetMon] : []
+        count := windows.Length
 
-        g_SinglePaneSide := (g_TwoPaneLayout == "left-stacked") ? "left" : ((g_TwoPaneLayout == "right-stacked") ? "right" : "")
-    }
-    else if (count == 3)
-    {
-        ; Cycle 3-pane master orientations: bottom -> top -> left -> right -> bottom
-        if (g_TileLayout == "bottom")
-            g_TileLayout := "top"
-        else if (g_TileLayout == "top")
-            g_TileLayout := "left"
-        else if (g_TileLayout == "left")
-            g_TileLayout := "right"
-        else
-            g_TileLayout := "bottom"
-    }
+        curTL := GetMonTileLayout(targetMon)
+        curTP := GetMonTwoPaneLayout(targetMon)
+        curSP := GetMonSinglePaneSide(targetMon)
 
-    TileAlacritty()
-    if (activeHwnd && WinExist("ahk_id " activeHwnd))
-        WinActivate("ahk_id " activeHwnd)
+        if (count == 1)
+        {
+            if (curSP == "")
+                SetMonSinglePaneSide(targetMon, "left")
+            else if (curSP == "left")
+                SetMonSinglePaneSide(targetMon, "right")
+            else
+                SetMonSinglePaneSide(targetMon, "")
+        }
+        else if (count == 2)
+        {
+            if (curTP == "side-by-side-visor")
+                curTP := "side-by-side-full"
+            else if (curTP == "side-by-side-full")
+                curTP := "left-stacked"
+            else if (curTP == "left-stacked")
+                curTP := "right-stacked"
+            else
+                curTP := "side-by-side-visor"
+
+            SetMonTwoPaneLayout(targetMon, curTP)
+            newSP := (curTP == "left-stacked") ? "left" : ((curTP == "right-stacked") ? "right" : "")
+            SetMonSinglePaneSide(targetMon, newSP)
+        }
+        else if (count == 3)
+        {
+            if (curTL == "bottom")
+                curTL := "top"
+            else if (curTL == "top")
+                curTL := "left"
+            else if (curTL == "left")
+                curTL := "right"
+            else
+                curTL := "bottom"
+
+            SetMonTileLayout(targetMon, curTL)
+        }
+
+        TileAlacritty(targetMon)
+        if (activeHwnd && WinExist("ahk_id " activeHwnd))
+            WinActivate("ahk_id " activeHwnd)
+    }
+    else
+    {
+        realWindows := GetAlacrittyWindows()
+        count := realWindows.Length
+
+        if (count == 1)
+        {
+            if (g_SinglePaneSide == "")
+                g_SinglePaneSide := "left"
+            else if (g_SinglePaneSide == "left")
+                g_SinglePaneSide := "right"
+            else
+                g_SinglePaneSide := ""
+        }
+        else if (count == 2)
+        {
+            if (g_TwoPaneLayout == "side-by-side-visor")
+                g_TwoPaneLayout := "side-by-side-full"
+            else if (g_TwoPaneLayout == "side-by-side-full")
+                g_TwoPaneLayout := "left-stacked"
+            else if (g_TwoPaneLayout == "left-stacked")
+                g_TwoPaneLayout := "right-stacked"
+            else
+                g_TwoPaneLayout := "side-by-side-visor"
+
+            g_SinglePaneSide := (g_TwoPaneLayout == "left-stacked") ? "left" : ((g_TwoPaneLayout == "right-stacked") ? "right" : "")
+        }
+        else if (count == 3)
+        {
+            if (g_TileLayout == "bottom")
+                g_TileLayout := "top"
+            else if (g_TileLayout == "top")
+                g_TileLayout := "left"
+            else if (g_TileLayout == "left")
+                g_TileLayout := "right"
+            else
+                g_TileLayout := "bottom"
+        }
+
+        TileAlacritty(targetMon)
+        if (activeHwnd && WinExist("ahk_id " activeHwnd))
+            WinActivate("ahk_id " activeHwnd)
+    }
 }
 
 
@@ -891,69 +1352,144 @@ GetDefaultShell()
     return "powershell.exe"
 }
 
-; Toggles the terminal visor on the display containing the mouse cursor
-ToggleVisor()
+; Helper: Spawns the initial terminal window on target monitor (handling welcome banner if first run)
+LaunchNewTerminal(targetMon)
 {
-    global g_FirstRun, g_ConfigFile
-    DetectHiddenWindows true
-    windows := GetAlacrittyWindows()
+    global g_FirstRun, g_ConfigFile, g_MultiMonitorMode, g_MonitorWindows
+    oldWindows := GetAlacrittyWindows()
 
-    ; Detect monitor containing mouse cursor
-    targetMon := GetMouseMonitor()
-
-    ; If none are running, launch the first one
-    if (windows.Length == 0)
+    if (g_FirstRun)
     {
-        if (g_FirstRun)
+        welcomeScript := ""
+        if FileExist(A_ScriptDir . "\welcome.ps1")
+            welcomeScript := A_ScriptDir . "\welcome.ps1"
+        else if FileExist(EnvGet("APPDATA") . "\alacritty\welcome.ps1")
+            welcomeScript := EnvGet("APPDATA") . "\alacritty\welcome.ps1"
+
+        if (welcomeScript != "")
         {
-            welcomeScript := ""
-            if FileExist(A_ScriptDir . "\welcome.ps1")
-                welcomeScript := A_ScriptDir . "\welcome.ps1"
-            else if FileExist(EnvGet("APPDATA") . "\alacritty\welcome.ps1")
-                welcomeScript := EnvGet("APPDATA") . "\alacritty\welcome.ps1"
-
-            if (welcomeScript != "")
-            {
-                shellProg := GetDefaultShell()
-                Run(Format('alacritty.exe -e {1} -NoLogo -NoExit -ExecutionPolicy Bypass -File "{2}"', shellProg, welcomeScript))
-            }
-            else
-            {
-                Run("alacritty.exe")
-            }
-
-            ; Mark first run complete and persist to config.ini
-            g_FirstRun := false
-            if (g_ConfigFile != "" && FileExist(g_ConfigFile))
-            {
-                try IniWrite("false", g_ConfigFile, "General", "FirstRun")
-            }
+            shellProg := GetDefaultShell()
+            Run(Format('alacritty.exe -e {1} -NoLogo -NoExit -ExecutionPolicy Bypass -File "{2}"', shellProg, welcomeScript))
         }
         else
         {
             Run("alacritty.exe")
         }
-        firstHwnd := 0
-        ; Adaptive polling: tile immediately once window appears (up to 1.5s cold start)
-        Loop 75 {
-            Sleep 20
-            firstWins := GetAlacrittyWindows()
-            if (firstWins.Length > 0)
+
+        ; Mark first run complete and persist to config.ini
+        g_FirstRun := false
+        if (g_ConfigFile != "" && FileExist(g_ConfigFile))
+        {
+            try IniWrite("false", g_ConfigFile, "General", "FirstRun")
+        }
+    }
+    else
+    {
+        Run("alacritty.exe")
+    }
+
+    firstHwnd := 0
+    ; Adaptive polling: tile immediately once window appears (up to 1.5s cold start)
+    Loop 75 {
+        Sleep 20
+        currentWindows := GetAlacrittyWindows()
+        if (currentWindows.Length > oldWindows.Length)
+        {
+            for hwnd in currentWindows
             {
-                firstHwnd := firstWins[1]
+                isOld := false
+                for oldH in oldWindows
+                {
+                    if (hwnd == oldH)
+                    {
+                        isOld := true
+                        break
+                    }
+                }
+                if (!isOld)
+                {
+                    firstHwnd := hwnd
+                    break
+                }
+            }
+            if (firstHwnd)
+                break
+        }
+    }
+
+    if (g_MultiMonitorMode == "isolated" && firstHwnd)
+    {
+        if (!g_MonitorWindows.Has(targetMon))
+            g_MonitorWindows[targetMon] := []
+        g_MonitorWindows[targetMon].Push(firstHwnd)
+    }
+
+    TileAlacritty(targetMon)
+
+    if (firstHwnd && WinExist("ahk_id " firstHwnd))
+        WinActivate("ahk_id " firstHwnd)
+}
+
+; Toggles the terminal visor on the display containing the mouse cursor
+ToggleVisor()
+{
+    global g_MultiMonitorMode, g_MonitorWindows, g_AlacrittyOrder
+    DetectHiddenWindows true
+
+    ; Detect monitor containing mouse cursor
+    targetMon := GetMouseMonitor()
+
+    if (g_MultiMonitorMode == "isolated")
+    {
+        SyncMonitorWindows(targetMon)
+
+        if (!g_MonitorWindows.Has(targetMon))
+            g_MonitorWindows[targetMon] := []
+
+        monWindows := g_MonitorWindows[targetMon]
+
+        ; Case A: No terminals on target display -> spawn initial terminal
+        if (monWindows.Length == 0)
+        {
+            LaunchNewTerminal(targetMon)
+            return
+        }
+
+        ; Case B: Terminals exist on target display -> check visibility
+        anyVisible := false
+        for hwnd in monWindows
+        {
+            if DllCall("IsWindowVisible", "Ptr", hwnd)
+            {
+                anyVisible := true
                 break
             }
         }
-        TileAlacritty(targetMon)
 
-        if (firstHwnd)
-            WinActivate("ahk_id " firstHwnd)
+        if (anyVisible)
+        {
+            ; Hide all terminals on this display
+            for hwnd in monWindows
+                WinHide("ahk_id " hwnd)
+            ClearDividers(targetMon)
+        }
         else
         {
-            firstWins := GetAlacrittyWindows()
-            if (firstWins.Length > 0)
-                WinActivate("ahk_id " firstWins[1])
+            ; Show and tile terminals on this display
+            TileAlacritty(targetMon)
+            if (monWindows.Length > 0 && WinExist("ahk_id " monWindows[1]))
+                WinActivate("ahk_id " monWindows[1])
         }
+        return
+    }
+
+    ; --- Hopping mode legacy behavior ---
+    windows := GetAlacrittyWindows()
+
+    ; If none are running, launch initial terminal
+    if (windows.Length == 0)
+    {
+        LaunchNewTerminal(targetMon)
         return
     }
 
@@ -982,7 +1518,7 @@ ToggleVisor()
         ; If already showing on the mouse monitor -> hide all
         for hwnd in windows
             WinHide("ahk_id " hwnd)
-        ClearDividers()
+        ClearDividers(0)
     }
     else
     {
@@ -996,21 +1532,42 @@ ToggleVisor()
 SpawnSplit()
 {
     global g_AlacrittyOrder, g_TwoPaneLayout, g_TileLayout, g_SinglePaneSide
-    oldWindows := GetAlacrittyWindows()
-    oldCount := oldWindows.Length
+    global g_MultiMonitorMode, g_MonitorWindows
+
+    activeHwnd := WinActive("A")
+    targetMon := activeHwnd ? GetWindowMonitor(activeHwnd) : 0
+    if (targetMon == 0)
+        targetMon := GetMouseMonitor()
+
+    if (g_MultiMonitorMode == "isolated")
+    {
+        SyncMonitorWindows(targetMon)
+        if (!g_MonitorWindows.Has(targetMon))
+            g_MonitorWindows[targetMon] := []
+
+        monWindows := g_MonitorWindows[targetMon]
+        oldCount := monWindows.Length
+    }
+    else
+    {
+        oldWindows := GetAlacrittyWindows()
+        oldCount := oldWindows.Length
+    }
+
+    allBefore := GetAlacrittyWindows()
     Run("alacritty.exe")
 
     newHwnd := 0
     ; Adaptive polling: tile immediately once new window appears (up to 450ms max)
     Loop 30 {
         Sleep 15
-        currentWindows := GetAlacrittyWindows()
-        if (currentWindows.Length > oldCount)
+        allNow := GetAlacrittyWindows()
+        if (allNow.Length > allBefore.Length)
         {
-            for hwnd in currentWindows
+            for hwnd in allNow
             {
                 isOld := false
-                for oldH in oldWindows
+                for oldH in allBefore
                 {
                     if (hwnd == oldH)
                     {
@@ -1024,91 +1581,316 @@ SpawnSplit()
                     break
                 }
             }
-            break
+            if (newHwnd)
+                break
         }
     }
 
-    ; Handle dynamic transitions:
-    if (oldCount == 1 && newHwnd)
+    if (g_MultiMonitorMode == "isolated")
     {
-        ; 1 -> 2 panes:
-        if (g_SinglePaneSide == "left")
+        if (newHwnd)
+            g_MonitorWindows[targetMon].Push(newHwnd)
+
+        ; Handle dynamic transitions for target display
+        curTP := GetMonTwoPaneLayout(targetMon)
+        curTL := GetMonTileLayout(targetMon)
+        curSP := GetMonSinglePaneSide(targetMon)
+
+        if (oldCount == 1 && newHwnd)
         {
-            g_TwoPaneLayout := "left-stacked"
-            g_SinglePaneSide := ""
+            ; 1 -> 2 panes:
+            if (curSP == "left")
+            {
+                SetMonTwoPaneLayout(targetMon, "left-stacked")
+                SetMonSinglePaneSide(targetMon, "")
+            }
+            else if (curSP == "right")
+            {
+                SetMonTwoPaneLayout(targetMon, "right-stacked")
+                SetMonSinglePaneSide(targetMon, "")
+            }
         }
-        else if (g_SinglePaneSide == "right")
+        else if (oldCount == 2 && newHwnd)
         {
-            g_TwoPaneLayout := "right-stacked"
-            g_SinglePaneSide := ""
+            ; 2 -> 3 panes:
+            if (curTP == "left-stacked")
+            {
+                SetMonTileLayout(targetMon, "right")
+                if (monWindows.Length >= 2)
+                    g_MonitorWindows[targetMon] := [monWindows[1], newHwnd, monWindows[2]]
+            }
+            else if (curTP == "right-stacked")
+            {
+                SetMonTileLayout(targetMon, "left")
+                if (monWindows.Length >= 2)
+                    g_MonitorWindows[targetMon] := [newHwnd, monWindows[1], monWindows[2]]
+            }
         }
+
+        TileAlacritty(targetMon)
+
+        if (newHwnd && WinExist("ahk_id " newHwnd))
+            WinActivate("ahk_id " newHwnd)
+        else if (g_MonitorWindows[targetMon].Length > oldCount)
+            WinActivate("ahk_id " g_MonitorWindows[targetMon][g_MonitorWindows[targetMon].Length])
     }
-    else if (oldCount == 2 && newHwnd)
+    else
     {
-        ; 2 -> 3 panes:
-        if (g_TwoPaneLayout == "left-stacked")
+        ; Hopping mode transitions
+        if (oldCount == 1 && newHwnd)
         {
-            g_TileLayout := "right"
-            ; In right master mode: [1: Top-Left, 2: Right-Master, 3: Bottom-Left]
-            ; Ensure old windows remain in their slots and new window becomes Right-Master
-            if (oldWindows.Length >= 2)
-                g_AlacrittyOrder := [oldWindows[1], newHwnd, oldWindows[2]]
+            if (g_SinglePaneSide == "left")
+            {
+                g_TwoPaneLayout := "left-stacked"
+                g_SinglePaneSide := ""
+            }
+            else if (g_SinglePaneSide == "right")
+            {
+                g_TwoPaneLayout := "right-stacked"
+                g_SinglePaneSide := ""
+            }
         }
-        else if (g_TwoPaneLayout == "right-stacked")
+        else if (oldCount == 2 && newHwnd)
         {
-            g_TileLayout := "left"
-            ; In left master mode: [1: Left-Master, 2: Top-Right, 3: Bottom-Right]
-            ; New window becomes Left-Master, old windows remain Top-Right and Bottom-Right
-            if (oldWindows.Length >= 2)
-                g_AlacrittyOrder := [newHwnd, oldWindows[1], oldWindows[2]]
+            if (g_TwoPaneLayout == "left-stacked")
+            {
+                g_TileLayout := "right"
+                if (allBefore.Length >= 2)
+                    g_AlacrittyOrder := [allBefore[1], newHwnd, allBefore[2]]
+            }
+            else if (g_TwoPaneLayout == "right-stacked")
+            {
+                g_TileLayout := "left"
+                if (allBefore.Length >= 2)
+                    g_AlacrittyOrder := [newHwnd, allBefore[1], allBefore[2]]
+            }
         }
+
+        TileAlacritty(targetMon)
+
+        if (newHwnd && WinExist("ahk_id " newHwnd))
+            WinActivate("ahk_id " newHwnd)
+        else if (g_AlacrittyOrder.Length > oldCount)
+            WinActivate("ahk_id " g_AlacrittyOrder[g_AlacrittyOrder.Length])
     }
-
-    TileAlacritty()
-
-    ; Shift keyboard typing focus to the newly created split terminal
-    if (newHwnd)
-        WinActivate("ahk_id " newHwnd)
-    else if (g_AlacrittyOrder.Length > oldCount)
-        WinActivate("ahk_id " g_AlacrittyOrder[g_AlacrittyOrder.Length])
 }
 
 ; Closes focused window and auto-rebalances remaining windows
 CloseSplit()
 {
     global g_TwoPaneLayout, g_TileLayout, g_SinglePaneSide
+    global g_MultiMonitorMode, g_MonitorWindows
+
     activeHwnd := WinActive("A")
-    oldWindows := GetAlacrittyWindows()
-    oldCount := oldWindows.Length
+    if (!activeHwnd)
+        return
 
-    WinClose("ahk_id " activeHwnd)
-    ; Adaptive polling: re-tile immediately once window closes (up to 200ms max)
-    Loop 20 {
-        Sleep 10
-        if (!WinExist("ahk_id " activeHwnd))
-            break
-    }
+    targetMon := GetWindowMonitor(activeHwnd)
+    if (targetMon == 0)
+        targetMon := GetMouseMonitor()
 
-    ; Handle dynamic transitions when closing panes:
-    if (oldCount == 2)
+    if (g_MultiMonitorMode == "isolated")
     {
-        ; 2 -> 1 pane:
-        ; When closing a pane from left-stacked or right-stacked, remaining terminal stays on its half
-        if (g_TwoPaneLayout == "left-stacked")
-            g_SinglePaneSide := "left"
-        else if (g_TwoPaneLayout == "right-stacked")
-            g_SinglePaneSide := "right"
+        SyncMonitorWindows(targetMon)
+        if (!g_MonitorWindows.Has(targetMon))
+            g_MonitorWindows[targetMon] := []
+
+        monWindows := g_MonitorWindows[targetMon]
+        oldCount := monWindows.Length
+
+        WinClose("ahk_id " activeHwnd)
+        ; Adaptive polling: re-tile immediately once window closes (up to 200ms max)
+        Loop 20 {
+            Sleep 10
+            if (!WinExist("ahk_id " activeHwnd))
+                break
+        }
+
+        ; Remove activeHwnd from g_MonitorWindows[targetMon]
+        newList := []
+        for hwnd in g_MonitorWindows[targetMon]
+        {
+            if (hwnd != activeHwnd && WinExist("ahk_id " hwnd))
+                newList.Push(hwnd)
+        }
+        g_MonitorWindows[targetMon] := newList
+
+        curTP := GetMonTwoPaneLayout(targetMon)
+        curTL := GetMonTileLayout(targetMon)
+
+        ; Handle dynamic transitions when closing panes:
+        if (oldCount == 2)
+        {
+            if (curTP == "left-stacked")
+                SetMonSinglePaneSide(targetMon, "left")
+            else if (curTP == "right-stacked")
+                SetMonSinglePaneSide(targetMon, "right")
+            else
+                SetMonSinglePaneSide(targetMon, "")
+        }
+        else if (oldCount == 3)
+        {
+            if (curTL == "right")
+                SetMonTwoPaneLayout(targetMon, "left-stacked")
+            else if (curTL == "left")
+                SetMonTwoPaneLayout(targetMon, "right-stacked")
+        }
+
+        if (g_MonitorWindows[targetMon].Length > 0)
+        {
+            TileAlacritty(targetMon)
+            WinActivate("ahk_id " g_MonitorWindows[targetMon][g_MonitorWindows[targetMon].Length])
+        }
         else
-            g_SinglePaneSide := ""
+        {
+            ClearDividers(targetMon)
+        }
     }
-    else if (oldCount == 3)
+    else
     {
-        ; 3 -> 2 panes:
-        if (g_TileLayout == "right")
-            g_TwoPaneLayout := "left-stacked"
-        else if (g_TileLayout == "left")
-            g_TwoPaneLayout := "right-stacked"
+        oldWindows := GetAlacrittyWindows()
+        oldCount := oldWindows.Length
+
+        WinClose("ahk_id " activeHwnd)
+        Loop 20 {
+            Sleep 10
+            if (!WinExist("ahk_id " activeHwnd))
+                break
+        }
+
+        if (oldCount == 2)
+        {
+            if (g_TwoPaneLayout == "left-stacked")
+                g_SinglePaneSide := "left"
+            else if (g_TwoPaneLayout == "right-stacked")
+                g_SinglePaneSide := "right"
+            else
+                g_SinglePaneSide := ""
+        }
+        else if (oldCount == 3)
+        {
+            if (g_TileLayout == "right")
+                g_TwoPaneLayout := "left-stacked"
+            else if (g_TileLayout == "left")
+                g_TwoPaneLayout := "right-stacked"
+        }
+
+        TileAlacritty()
+    }
+}
+
+
+; -------------------------------------------------------------
+; Topology Safety: Display Changes & Disconnect Migration
+; -------------------------------------------------------------
+
+; Handler for WM_DISPLAYCHANGE (0x007E)
+OnDisplayChange(wParam, lParam, msg, hwnd)
+{
+    ; Debounce by 500ms to allow Windows display subsystem to fully stabilize
+    SetTimer(HandleDisplayChange, -500)
+}
+
+; Safely migrates orphaned terminal windows from disconnected monitors to primary display
+HandleDisplayChange()
+{
+    global g_MultiMonitorMode, g_MonitorWindows, g_MonitorDividers
+    if (g_MultiMonitorMode != "isolated")
+        return
+
+    monCount := MonitorGetCount()
+    primaryMon := MonitorGetPrimary()
+
+    ; 1. Sync live windows to purge any closed ones
+    SyncMonitorWindows()
+
+    ; 2. Identify any windows belonging to monitor IDs that no longer exist
+    migratedWindows := []
+    invalidMons := []
+
+    for monId, winList in g_MonitorWindows
+    {
+        if (monId > monCount || monId < 1)
+        {
+            for hwnd in winList
+            {
+                if (WinExist("ahk_id " hwnd))
+                    migratedWindows.Push(hwnd)
+            }
+            invalidMons.Push(monId)
+        }
     }
 
-    TileAlacritty()
+    ; Clear invalid monitors and their dividers
+    for monId in invalidMons
+    {
+        ClearDividers(monId)
+        g_MonitorWindows.Delete(monId)
+        if (g_MonitorDividers.Has(monId))
+            g_MonitorDividers.Delete(monId)
+    }
+
+    ; 3. If windows need migration to primary monitor
+    if (migratedWindows.Length > 0)
+    {
+        if (!g_MonitorWindows.Has(primaryMon))
+            g_MonitorWindows[primaryMon] := []
+
+        anyMigratedVisible := false
+        for hwnd in migratedWindows
+        {
+            if DllCall("IsWindowVisible", "Ptr", hwnd)
+                anyMigratedVisible := true
+            g_MonitorWindows[primaryMon].Push(hwnd)
+        }
+
+        if (anyMigratedVisible || IsMonitorVisible(primaryMon))
+        {
+            TileAlacritty(primaryMon)
+        }
+    }
+
+    ; 4. Check if existing valid monitors' work areas shifted and retile any visible monitors
+    Loop monCount {
+        monId := A_Index
+        if (IsMonitorVisible(monId))
+        {
+            TileAlacritty(monId)
+        }
+    }
+}
+
+
+; -------------------------------------------------------------
+; Script Initialization
+; -------------------------------------------------------------
+LoadConfig()
+RegisterHotkeys()
+OnMessage(0x007E, OnDisplayChange)
+A_IconTip := "Quake Alacritty"
+
+; Sync any existing windows and restore layout if already visible on startup/reload
+SyncMonitorWindows()
+if (g_MultiMonitorMode == "isolated")
+{
+    Loop MonitorGetCount() {
+        monId := A_Index
+        if (IsMonitorVisible(monId))
+            TileAlacritty(monId)
+    }
+}
+else
+{
+    realWins := GetAlacrittyWindows()
+    anyVis := false
+    for hwnd in realWins
+    {
+        if DllCall("IsWindowVisible", "Ptr", hwnd)
+        {
+            anyVis := true
+            break
+        }
+    }
+    if (anyVis)
+        TileAlacritty()
 }
