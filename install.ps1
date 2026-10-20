@@ -279,10 +279,13 @@ if ($shouldCreateStartup) {
 if (($selectedShell -in @("powershell", "pwsh")) -and (Test-Path $PROFILE)) {
     try {
         $profileContent = Get-Content $PROFILE -Raw -ErrorAction SilentlyContinue
+        $welcomePath = Join-Path $TargetDir "welcome.ps1"
         if ($profileContent -notmatch 'quake-help') {
-            $welcomePath = Join-Path $TargetDir "welcome.ps1"
-            Add-Content -Path $PROFILE -Value "`n# Quake Alacritty Cheat Sheet`nfunction quake-help { & `"$welcomePath`" }"
-            Write-Host "  [Profile] Registered 'quake-help' in `$PROFILE" -ForegroundColor Green
+            Add-Content -Path $PROFILE -Value "`n# Quake Alacritty Cheat Sheet & Environment Helper`nfunction quake-help { & `"$welcomePath`" }`nfunction quake-env { & `"$welcomePath`" -EnvInfo }"
+            Write-Host "  [Profile] Registered 'quake-help' and 'quake-env' in `$PROFILE" -ForegroundColor Green
+        } elseif ($profileContent -notmatch 'quake-env') {
+            Add-Content -Path $PROFILE -Value "`nfunction quake-env { & `"$welcomePath`" -EnvInfo }"
+            Write-Host "  [Profile] Registered 'quake-env' in `$PROFILE" -ForegroundColor Green
         }
     } catch {}
 }

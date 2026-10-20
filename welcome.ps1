@@ -1,7 +1,8 @@
 ﻿# Quake Alacritty - In-Terminal Welcome Banner & Cheat Sheet
 [CmdletBinding()]
 param(
-    [switch]$TipOnly
+    [switch]$TipOnly,
+    [switch]$EnvInfo
 )
 
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
@@ -185,12 +186,83 @@ function global:Show-QuakeCheatsheet {
     Write-Host ""
 }
 
-# Define global helper function so user can run 'quake-help' anytime in their session
+function global:Show-QuakeEnvironment {
+    param([switch]$NoClip)
+
+    $o = (Get-ItemProperty "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion" -ErrorAction SilentlyContinue)
+    $winVer = if ($o -and $o.DisplayVersion) { "Windows 11 $($o.DisplayVersion) (Build $($o.CurrentBuild))" } else { "Windows 11" }
+
+    $ahk = @(
+        "AutoHotkey64.exe",
+        "$env:LOCALAPPDATA\Programs\AutoHotkey\v2\AutoHotkey64.exe",
+        "C:\Program Files\AutoHotkey\v2\AutoHotkey64.exe"
+    ) | ForEach-Object {
+        if ($_ -and (Test-Path $_ -PathType Leaf -ErrorAction SilentlyContinue)) { $_ } else { (Get-Command $_ -ErrorAction SilentlyContinue).Source }
+    } | Where-Object { $_ } | Select-Object -First 1
+
+    $ahkVer = if ($ahk) { (Get-Item $ahk).VersionInfo.ProductVersion } else { "Not found" }
+
+    $alacVer = try {
+        $p = [Diagnostics.Process]::Start([Diagnostics.ProcessStartInfo]@{
+            FileName = "alacritty"
+            Arguments = "--version"
+            RedirectStandardOutput = $true
+            UseShellExecute = $false
+            CreateNoWindow = $true
+        })
+        $p.StandardOutput.ReadToEnd().Trim() -replace '^alacritty\s*', ''
+    } catch { "Not found" }
+
+    Add-Type -AssemblyName System.Windows.Forms -ErrorAction SilentlyContinue
+    $screens = try {
+        ([Windows.Forms.Screen]::AllScreens | ForEach-Object {
+            "$($_.Bounds.Width)x$($_.Bounds.Height)$(if ($_.Primary) { ' (Primary)' })"
+        }) -join ', '
+    } catch { "Unknown" }
+
+    $shellName = if ($PSVersionTable.PSEdition) {
+        "$($PSVersionTable.PSEdition) $($PSVersionTable.PSVersion)"
+    } else {
+        "PowerShell 5.1"
+    }
+
+    $md = @"
+- **OS**: $winVer
+- **AutoHotkey Version**: $ahkVer
+- **Alacritty Version**: $alacVer
+- **Monitor Setup**: $screens
+- **Shell**: $shellName
+"@
+
+    Write-Host ""
+    Write-Host $md
+    Write-Host ""
+
+    if (-not $NoClip) {
+        try {
+            if (Get-Command Set-Clipboard -ErrorAction SilentlyContinue) {
+                $md | Set-Clipboard
+            } else {
+                $md | clip.exe
+            }
+            Write-Host "  ✨ Copied environment info to clipboard!" -ForegroundColor Green
+            Write-Host ""
+        } catch {}
+    }
+}
+
+# Define global helper functions so user can run 'quake-help' or 'quake-env' anytime in their session
 function global:quake-help {
     Show-QuakeCheatsheet
 }
 
-if ($TipOnly) {
+function global:quake-env {
+    Show-QuakeEnvironment
+}
+
+if ($EnvInfo) {
+    Show-QuakeEnvironment
+} elseif ($TipOnly) {
     Show-QuakeTip
 } else {
     Show-QuakeCheatsheet
