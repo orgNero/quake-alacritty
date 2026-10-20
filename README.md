@@ -14,7 +14,10 @@ Features mouse-aware multi-monitor detection, dynamic 2×2 quad grid tiling, acr
 
 ## 🚀 Key Features
 
-* **Drop-Down Visor (`Win + §`):** Smoothly toggles from the top on whichever monitor currently holds your **mouse cursor**. If already open on another display, pressing `Win + §` immediately hops the visor over to your current screen.
+* **Independent Per-Monitor Terminal Workspaces (`Win + §`):**
+  * **Isolated Workspaces (`MultiMonitorMode=isolated`, Default):** Each physical monitor maintains its own independent terminal workspace, layout orientation, and seam dividers. Summoning or dismissing the visor on one screen never disturbs or flickers terminals running on another display.
+  * **Hopping Mode (`MultiMonitorMode=hopping`):** Prefer a single floating visor? Switch mode to `hopping` in `config.ini` to let a single terminal pool travel between displays to follow your mouse.
+  * **Display Topology Safety:** Automatically detects monitor disconnects and resolution shifts (`WM_DISPLAYCHANGE`), safely migrating any orphaned terminals to your primary display without losing session states.
 * **Smart Dynamic Multi-Pane Tiling (`Alt + Enter`, `Alt + L`):**
   * **1 Terminal:** Top visor (100% width, 40% height) or side half-screen column (50% width, 100% height).
   * **2 Terminals:** 4 flexible modes cycled live via `Alt + L`:
@@ -110,7 +113,8 @@ Located at `%APPDATA%\alacritty\config.ini` (or the repository root):
 ```ini
 [General]
 FirstRun=true
-MultiMonitorMode=hopping
+; Multi-monitor visor workspace mode (isolated | hopping)
+MultiMonitorMode=isolated
 
 [Appearance]
 ; Seam divider thickness in pixels (1-5px)
