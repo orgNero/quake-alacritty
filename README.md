@@ -18,7 +18,7 @@ Features mouse-aware multi-monitor detection, dynamic 2×2 quad grid tiling, acr
   * **Isolated Workspaces (`MultiMonitorMode=isolated`, Default):** Each physical monitor maintains its own independent terminal workspace, layout orientation, and seam dividers. Summoning or dismissing the visor on one screen never disturbs or flickers terminals running on another display.
   * **Hopping Mode (`MultiMonitorMode=hopping`):** Prefer a single floating visor? Switch mode to `hopping` in `config.ini` to let a single terminal pool travel between displays to follow your mouse.
   * **Display Topology Safety:** Automatically detects monitor disconnects and resolution shifts (`WM_DISPLAYCHANGE`), safely migrating any orphaned terminals to your primary display without losing session states.
-  * **Cross-Monitor Visor Migration (`Win + Shift + Left / Right`):** Seamlessly relocate or swap your active visor workspace between physical monitors without killing running sessions. Automatically handles spatial left-to-right monitor sorting, work area dimensions, and click-through cyan seam overlays across mixed-DPI displays.
+  * **Cross-Monitor Visor Migration (`Alt + Ctrl + Left / Right`):** Seamlessly relocate or swap your active visor workspace between physical monitors without killing running sessions. Automatically handles spatial left-to-right monitor sorting, work area dimensions, and click-through cyan seam overlays across mixed-DPI displays.
 * **Smart Dynamic Multi-Pane Tiling (`Alt + Enter`, `Alt + L`):**
   * **1 Terminal:** Top visor (100% width, 40% height) or side half-screen column (50% width, 100% height).
   * **2 Terminals:** 5 flexible modes cycled live via `Alt + L`:
@@ -97,7 +97,7 @@ Run PowerShell from inside the repository folder:
 The setup wizard guides you through:
 1. **Prerequisite Check**: Automatically detects if Alacritty, AutoHotkey v2, or JetBrainsMono Nerd Font are missing and offers to install them via `winget`.
 2. **Shell Selection**: Choose your default environment out of the box — **PowerShell**, **WSL (Ubuntu / Linux Bash)**, or **Git Bash**.
-3. **Keyboard Layout**: Select **Nordic / Swedish (`Win + §`)** or **US / Standard ANSI (`Win + ` `)**.
+3. **Keyboard Layout**: Select **Nordic / Swedish (`Win + §`)** or **US / Standard ANSI (`` `Win + ` `` / `Win + ~`)**.
 4. **Startup Integration**: Configures automatic startup with Windows.
 
 ### Option B: Manual Setup
@@ -106,7 +106,7 @@ The setup wizard guides you through:
    C:\Users\<YourUsername>\AppData\Roaming\alacritty\
    ```
 2. Run `quake_alacritty.ahk` with AutoHotkey v2.
-3. Press **`Win + §`** (or **`Win + ` `** on US ANSI) anywhere to summon your terminal!
+3. Press **`Win + §`** (or **`` `Win + ` ``** on US ANSI) anywhere to summon your terminal!
 
 ---
 
