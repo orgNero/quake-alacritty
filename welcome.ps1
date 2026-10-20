@@ -78,6 +78,7 @@ function global:Show-QuakeCheatsheet {
         Focus       = "Alt + Arrows"
         Swap        = "Alt + Shift + Arrows"
         RotatePanes = "Alt + Shift + Space"
+        MoveVisor   = "Win + Shift + Left/Right"
         Reload      = "Alt + Ctrl + R"
     }
 
@@ -92,7 +93,7 @@ function global:Show-QuakeCheatsheet {
                 if ($trimmed.StartsWith('[') -and -not ($trimmed -match '^\[Hotkeys\]')) { $inHotkeys = $false; continue }
                 if ($inHotkeys -and ($trimmed -match '^([^=]+)=(.*)$')) {
                     $k = $Matches[1].Trim()
-                    $v = $Matches[2].Trim()
+                    $v = ($Matches[2] -split ';')[0].Trim()
                     switch ($k) {
                         'ToggleVisor' { $hotkeys.ToggleVisor = Convert-AhkKey $v ("Win + " + [string][char]0x00A7) }
                         'SplitWindow' { $hotkeys.SplitWindow = Convert-AhkKey $v 'Alt + Enter' }
@@ -108,6 +109,10 @@ function global:Show-QuakeCheatsheet {
                             $hotkeys.Swap = ($baseMod -replace 'Left', 'Arrows')
                         }
                         'RotatePanes' { $hotkeys.RotatePanes = Convert-AhkKey $v 'Alt + Shift + Space' }
+                        'MoveVisorLeft' {
+                            $baseMod = Convert-AhkKey $v 'Win + Shift + Left'
+                            $hotkeys.MoveVisor = ($baseMod -replace 'Left', 'Left/Right')
+                        }
                         'ReloadScript'{ $hotkeys.Reload      = Convert-AhkKey $v 'Alt + Ctrl + R' }
                     }
                 }
@@ -133,6 +138,7 @@ function global:Show-QuakeCheatsheet {
         @{ Key = $hotkeys.Focus;       Action = "Switch typing focus between panes" },
         @{ Key = $hotkeys.Swap;        Action = "Swap active pane position" },
         @{ Key = $hotkeys.RotatePanes; Action = "Rotate all panes clockwise" },
+        @{ Key = $hotkeys.MoveVisor;   Action = "Move / swap visor across monitors" },
         @{ Key = $hotkeys.Reload;      Action = "Reload config.ini" }
     )
 

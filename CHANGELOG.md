@@ -1,4 +1,4 @@
-# Changelog
+﻿# Changelog
 
 All notable changes to this project will be documented in this file.
 Every merge from a development branch into `main` must add an entry describing what was included.
@@ -7,6 +7,34 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.10.0] - 2026-10-20
+
+## Features
+### Major
+- **Cross-Monitor Visor Relocation & Workspace Swapping (`Win + Shift + Left / Right`)**: Added dynamic multi-monitor visor migration allowing users to shift or swap their active terminal cluster across physical monitors without closing or restarting shells.
+  - Supports both empty display migration (moving all windows and seam dividers to the target screen) and occupied display swapping (atomic pairwise exchange of terminal pools between screens).
+  - Automatically sorts displays by physical X-coordinate (`mL`) rather than arbitrary Windows monitor IDs, ensuring directional arrows always map accurately to physical left/right desktop layouts.
+  - Safely clamps at outer monitor boundaries to prevent accidental wraparound disorientation.
+  - Full compatibility with both `MultiMonitorMode=isolated` (per-monitor workspaces) and `MultiMonitorMode=hopping` (roaming single pool).
+### Minor
+- **In-Terminal Cheat Sheet Synchronization (`welcome.ps1`)**: Added `Win + Shift + Left/Right` to the quickstart cheat sheet table and patched the `config.ini` parser to strip inline comments.
+
+## Fixes
+### Minor
+- **Inline Comment Sanitization in Help Banner**: Fixed an issue where inline comments in `config.ini` (e.g. `ToggleVisor=#sc029 ; Win + §`) were erroneously parsed as modifier tokens by `welcome.ps1`.
+
+## Window Management & Multi-Monitor
+- Implemented physical monitor spatial sorting (`MoveVisorDirection`) using `MonitorGet` coordinates.
+- Preserves and swaps per-monitor layout states (`g_MonitorTileLayout`, `g_MonitorTwoPaneLayout`, `g_MonitorSinglePaneSide`) during cross-monitor relocation.
+- Re-tiles destination windows with `MonitorGetWorkArea` and updates click-through seam divider GUIs (`-DPIScale`) on both source and destination monitors.
+
+## Styling & Appearance
+_None_
+
+## Configuration & Tooling
+- Added `[Hotkeys] MoveVisorLeft` (`#+Left`) and `MoveVisorRight` (`#+Right`) to `config.ini` and `README.md`.
+
+---
 ## [0.9.0] - 2026-10-20
 
 ## Features
@@ -56,33 +84,6 @@ _None_
 
 ## Configuration & Tooling
 - **Configuration Option in `config.ini`**: Added `top-bottom` (with aliases `horizontal-full` and `horizontal`) to `[Appearance] TwoPaneLayout`.
-
----
-
-## [Unreleased]
-
-## Features
-### Major
-_None_
-### Minor
-_None_
-
-## Fixes
-### Major
-_None_
-### Minor
-_None_
-
-## Window Management & Multi-Monitor
-_None_
-
-## Styling & Appearance
-_None_
-
-## Configuration & Tooling
-_None_
-
----
 
 ## [0.7.0] - 2026-10-20
 
