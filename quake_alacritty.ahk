@@ -1,10 +1,11 @@
-#Requires AutoHotkey v2.0
+﻿#Requires AutoHotkey v2.0
 #SingleInstance Force
 Persistent true
 DetectHiddenWindows true
 SetWinDelay -1
 SetControlDelay -1
-
+InstallKeybdHook true, true
+A_MenuMaskKey := "vkE8"
 
 ; -------------------------------------------------------------
 ; Global Configuration & State
@@ -182,10 +183,13 @@ RegisterKey(keyName, callback)
 {
     if (keyName != "")
     {
-        try Hotkey(keyName, callback)
+        hookKey := (InStr(keyName, "#") && !InStr(keyName, "$")) ? ("$" . keyName) : keyName
+        try Hotkey(hookKey, callback)
+        catch {
+            try Hotkey(keyName, callback)
+        }
     }
 }
-
 
 ; -------------------------------------------------------------
 ; Layout Getters & Setters per Monitor
@@ -234,7 +238,6 @@ SetMonSinglePaneSide(mon, val)
     g_MonitorSinglePaneSide[mon] := val
     g_SinglePaneSide := val
 }
-
 
 ; -------------------------------------------------------------
 ; Dividers Management
@@ -306,7 +309,6 @@ CreateDivider(arg1, arg2, arg3, arg4, arg5, arg6 := "")
         g_MonitorDividers[mon] := []
     g_MonitorDividers[mon].Push(div)
 }
-
 
 ; -------------------------------------------------------------
 ; Window Discovery & Synchronization
@@ -607,7 +609,6 @@ GetMouseMonitor()
     return MonitorGetPrimary()
 }
 
-
 ; -------------------------------------------------------------
 ; Window Tiling Engine
 ; -------------------------------------------------------------
@@ -617,7 +618,7 @@ GetMouseMonitor()
 ; 2 windows: Configurable 2-pane mode (side-by-side visor/full, left-stacked, right-stacked)
 ; 3 windows: 4-cardinal master orientations (bottom, top, left, right)
 ; 4 windows: Top 50% / 50% width, Bottom 50% / 50% width (2x2 Quad, cyan cross seams)
-TileAlacritty(targetMon := 0)
+TileAlacritty(targetMon := 0, syncWindows := true)
 {
     global g_BorderGap, g_BorderColor, g_VisorHeightPercent
     global g_TileLayout, g_TwoPaneLayout, g_SinglePaneSide
@@ -635,7 +636,8 @@ TileAlacritty(targetMon := 0)
                 targetMon := GetMouseMonitor()
         }
 
-        SyncMonitorWindows(targetMon)
+        if (syncWindows)
+            SyncMonitorWindows(targetMon)
 
         if (!g_MonitorWindows.Has(targetMon))
             g_MonitorWindows[targetMon] := []
@@ -665,7 +667,7 @@ TileAlacritty(targetMon := 0)
         }
 
         ClearDividers(0)
-        windows := SyncWindowOrder(realWindows)
+        windows := (syncWindows || g_AlacrittyOrder.Length == 0) ? SyncWindowOrder(realWindows) : g_AlacrittyOrder
 
         if (targetMon == 0)
         {
@@ -963,7 +965,6 @@ TileAlacritty(targetMon := 0)
         }
     }
 }
-
 
 ; -------------------------------------------------------------
 ; Keyboard Navigation & Swapping
@@ -1308,7 +1309,7 @@ MoveVisorDirection(dir)
     ; 4. Hopping mode: single roaming pool moves directly to dstMon
     if (g_MultiMonitorMode == "hopping")
     {
-        TileAlacritty(dstMon)
+        TileAlacritty(dstMon, false)
         if (WinExist("ahk_id " activeHwnd))
             WinActivate("ahk_id " activeHwnd)
         return
@@ -1353,14 +1354,14 @@ MoveVisorDirection(dir)
     g_MonitorSinglePaneSide[srcMon] := dstSide
 
     ; Re-tile destination monitor with relocated visor
-    TileAlacritty(dstMon)
+    TileAlacritty(dstMon, false)
 
     ; Re-tile or clear source monitor
     if (dstWindows.Length > 0)
     {
         if (dstWasVisible)
         {
-            TileAlacritty(srcMon)
+            TileAlacritty(srcMon, false)
         }
         else
         {
@@ -1490,7 +1491,6 @@ CycleLayout()
             WinActivate("ahk_id " activeHwnd)
     }
 }
-
 
 ; -------------------------------------------------------------
 ; Window Management Actions
@@ -1987,7 +1987,6 @@ CloseSplit()
     }
 }
 
-
 ; -------------------------------------------------------------
 ; Topology Safety: Display Changes & Disconnect Migration
 ; -------------------------------------------------------------
@@ -2067,7 +2066,6 @@ HandleDisplayChange()
         }
     }
 }
-
 
 ; -------------------------------------------------------------
 ; Script Initialization
