@@ -32,6 +32,32 @@ _None_
 
 ---
 
+## [0.7.0] - 2026-10-20
+
+## Features
+### Major
+- **Always Show Help Command on Every Terminal Start (`ShowHelpOnStart=always`)**: Enabled automatic presentation of the ANSI quickstart cheat sheet banner whenever a terminal is spawned -- including visor cold starts on any monitor and new split panes (`Alt + Enter`).
+### Minor
+- **Configurable Help Display Modes**: Added `[General] ShowHelpOnStart` supporting `always` (display on every terminal launch, default), `first-run` (display only on initial setup), and `never` (clean startup, accessible via `quake-help`).
+- **Centralized Terminal Launcher (`LaunchTerminalProcess`)**: Consolidated terminal invocation into a unified launcher across visor toggling and split creation.
+
+## Fixes
+### Major
+_None_
+### Minor
+_None_
+
+## Window Management & Multi-Monitor
+_None_
+
+## Styling & Appearance
+- **Cheat Sheet Label Polish**: Aligned visor shortcut description in `welcome.ps1` to reflect mouse-aware per-display toggling.
+
+## Configuration & Tooling
+- **Configuration Option in `config.ini`**: Added `[General] ShowHelpOnStart=always` with documentation in `config.ini` and `README.md`.
+
+---
+
 ## [0.6.0] - 2026-10-20
 
 ## Features
