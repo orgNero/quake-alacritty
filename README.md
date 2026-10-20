@@ -81,24 +81,30 @@ winget install -e --id DEVCOM.JetBrainsMonoNerdFont
 
 ## ⚡ Quick Start
 
-### Option A: Using the Automated Install Script
+### Option A: Using the Automated Install Script (Recommended)
 Run PowerShell from inside the repository folder:
 
 ```powershell
-# Standard deployment (copies files and sets up Windows Startup)
+# Interactive setup wizard (prompts for shell, keyboard layout, dependencies & startup)
 .\install.ps1
 
-# Or with automatic dependency installation and symbolic links:
-.\install.ps1 -InstallDependencies -UseSymlinks -CreateStartupShortcut
+# Or run headless / unattended with explicit options:
+.\install.ps1 -Shell wsl -KeyboardLayout us -InstallDependencies -CreateStartupShortcut
 ```
 
+The setup wizard guides you through:
+1. **Prerequisite Check**: Automatically detects if Alacritty, AutoHotkey v2, or JetBrainsMono Nerd Font are missing and offers to install them via `winget`.
+2. **Shell Selection**: Choose your default environment out of the box — **PowerShell**, **WSL (Ubuntu / Linux Bash)**, or **Git Bash**.
+3. **Keyboard Layout**: Select **Nordic / Swedish (`Win + §`)** or **US / Standard ANSI (`Win + ` `)**.
+4. **Startup Integration**: Configures automatic startup with Windows.
+
 ### Option B: Manual Setup
-1. Copy `alacritty.toml`, `quake_alacritty.ahk`, `config.ini`, and `welcome.ps1` to your configuration folder:
+1. Copy `alacritty.toml`, `quake_alacritty.ahk`, `config.ini`, `welcome.ps1`, and `uninstall.ps1` to your configuration folder:
    ```
    C:\Users\<YourUsername>\AppData\Roaming\alacritty\
    ```
 2. Run `quake_alacritty.ahk` with AutoHotkey v2.
-3. Press **`Win + §`** anywhere to summon your terminal!
+3. Press **`Win + §`** (or **`Win + ` `** on US ANSI) anywhere to summon your terminal!
 
 ---
 
@@ -184,6 +190,49 @@ opacity = 0.70    # 0.0 is completely transparent, 1.0 is solid
 blur = true       # Windows 11 Acrylic blur effect
 decorations = "None"
 ```
+
+### Configuring Your Shell (PowerShell, WSL Bash, Git Bash)
+Quake Alacritty natively supports any Windows shell inside Alacritty without forcing PowerShell wrappers. You can change your shell anytime in [`alacritty.toml`](alacritty.toml):
+
+**WSL Bash (Ubuntu / Linux):**
+```toml
+[terminal.shell]
+program = "wsl.exe"
+args = ["~"]
+```
+
+**Git Bash (MSYS2):**
+```toml
+[terminal.shell]
+program = "C:\\Program Files\\Git\\bin\\bash.exe"
+args = ["--login", "-i"]
+```
+
+**PowerShell:**
+```toml
+[terminal.shell]
+program = "powershell.exe"
+```
+
+---
+
+## 🗑️ Uninstallation
+
+To cleanly remove Quake Alacritty, run the uninstaller:
+
+```powershell
+# From the repository:
+.\uninstall.ps1
+
+# Or from your AppData installation folder:
+powershell -ExecutionPolicy Bypass -File "$env:APPDATA\alacritty\uninstall.ps1"
+```
+
+The uninstaller:
+- Terminates running Quake Alacritty background processes.
+- Removes the Windows Startup shortcut.
+- Cleans up the `quake-help` command from your PowerShell `$PROFILE`.
+- Removes deployed application files while giving you the option to keep or delete your custom configuration files (`config.ini` and `alacritty.toml`).
 
 ---
 

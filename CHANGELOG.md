@@ -7,6 +7,35 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.9.0] - 2026-10-20
+
+## Features
+### Major
+- **Interactive CLI Setup Wizard (`install.ps1`)**: Introduced a guided CLI setup wizard prompting users for prerequisite installations (Alacritty, AHK v2, Nerd Font via winget), default shell configuration (PowerShell, WSL Bash, Git Bash), keyboard layout mapping (Nordic `Win + §` vs. US ANSI `Win + ` `), and Windows startup integration.
+- **Dedicated Uninstaller (`uninstall.ps1`)**: Added a clean uninstallation script that stops running Quake Alacritty processes, removes startup shortcuts, unregisters profile hooks from `$PROFILE`, and removes deployed application scripts while allowing users to keep or delete their custom configuration files.
+### Minor
+- **Shell-Agnostic Launch Execution (`LaunchTerminalProcess`)**: Patched `quake_alacritty.ahk` to resolve `GetConfiguredShell()` from `alacritty.toml`. Non-PowerShell shells (e.g. `wsl.exe`, `bash.exe`) bypass PowerShell-specific startup flags (`-NoLogo -NoExit ... welcome.ps1`), allowing custom shells to launch cleanly without getting overridden.
+- **Headless / Scripted Installer Flags**: Added automated parameter support (`-Shell`, `-KeyboardLayout`, `-InstallDependencies`, `-CreateStartupShortcut`, `-NonInteractive`) to `install.ps1` for unattended and CI deployments.
+
+## Fixes
+### Major
+- **Non-PowerShell Startup Hijack**: Fixed an issue where `ShowHelpOnStart=tip` (or `FirstRun=true`) would force Alacritty to launch with `powershell.exe -e welcome.ps1` even when a user explicitly configured Bash or WSL in `alacritty.toml`.
+### Minor
+- **Windows PowerShell 5.1 BOM & Parser Resiliency**: Ensured installer and uninstaller `.ps1` files maintain proper UTF-8 BOM encoding and safe expression handling, preventing Windows-1252 ANSI character corruption and token parsing exceptions.
+
+## Window Management & Multi-Monitor
+_None_
+
+## Styling & Appearance
+_None_
+
+## Configuration & Tooling
+- **Deploy Uninstaller**: `install.ps1` automatically deploys `uninstall.ps1` to `%APPDATA%\alacritty\uninstall.ps1`.
+- **Automated Shell Injection**: Configures `[terminal.shell]` program and args dynamically in `alacritty.toml` during installation.
+- **Keyboard Layout Localization**: Automatically annotates and configures `ToggleVisor` in `config.ini` for Nordic (`#sc029`) and US (`#sc029` / backtick) keyboard users.
+
+---
+
 ## [0.8.0] - 2026-10-20
 
 ## Features
