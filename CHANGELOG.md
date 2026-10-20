@@ -32,6 +32,35 @@ _None_
 
 ---
 
+## [0.6.0] - 2026-10-20
+
+## Features
+### Major
+- **Independent Per-Monitor Terminal Workspaces (`MultiMonitorMode=isolated`)**: Each physical monitor now maintains its own isolated terminal workspace (`g_MonitorWindows := Map()`). Toggling the visor (`Win + §`) on one display strictly shows or hides only that display's terminals without disrupting terminals on other screens.
+- **Display Topology Safety & Migration (`WM_DISPLAYCHANGE`)**: Added automatic event listener for Windows message `0x007E` (`WM_DISPLAYCHANGE`). If a secondary monitor is unplugged, disconnected, or enters sleep mode, any orphaned terminals belonging to it are automatically migrated to the primary display.
+### Minor
+- **Per-Monitor Divider Isolation**: Cyan seam dividers are now tracked independently per monitor (`g_MonitorDividers[targetMon] := []`). Tiling, showing, or hiding splits on one display never affects or flickers divider lines on other displays.
+- **Per-Monitor Layout Memory**: Tile layouts (`TileLayout`), 2-pane modes (`TwoPaneLayout`), and half-screen states (`SinglePaneSide`) are tracked per display, allowing different layout presets (e.g. `left-stacked` on a secondary portrait display and `bottom` master on an ultrawide display).
+- **Directional Navigation & Swapping Monitor Boundary Containment**: Confined `FocusDirection` (`Alt + Arrows`), `SwapDirection` (`Alt + Shift + Arrows`), and `RotateWindows` (`Alt + Shift + Space`) to the active display so split navigation never jumps unintentionally across physical screens.
+
+## Fixes
+### Major
+_None_
+### Minor
+- **Display Drag Reassignment**: Added detection in `SyncMonitorWindows` for visible terminals dragged across monitors (or moved via `Win + Shift + Arrows`), seamlessly reassigning their tracking to the destination monitor.
+
+## Window Management & Multi-Monitor
+- **Partitioned Window Synchronization**: Implemented `SyncMonitorWindows(targetMon)` replacing the single-pool array with monitor-keyed partition lists while preserving backward compatibility for users configuring `MultiMonitorMode="hopping"`.
+- **First-Run Banner per Monitor**: Ensured `LaunchNewTerminal(targetMon)` properly hooks first-run welcome banners on whichever monitor first summons the terminal.
+
+## Styling & Appearance
+- **Zero-Flicker Multi-Screen Seam Rendering**: Partitioned divider creation and destruction so redrawing dividers on one monitor does not destroy or blink dividers on other active monitors.
+
+## Configuration & Tooling
+- **Default Multi-Monitor Mode in `config.ini`**: Set `[General] MultiMonitorMode=isolated` as the default mode in `config.ini` with documentation for `isolated` and `hopping` options.
+
+---
+
 ## [0.5.0] - 2026-10-18
 
 ## Features
