@@ -31,7 +31,8 @@ _None_
 
 ## Configuration & Tooling
 - Documented `Alt + F4` alongside `Alt + W` across `README.md` and `config.ini`.
-- Added comprehensive root cause analysis and technical mitigation documentation to `docs/BUGS_AND_GOTCHAS.md` (Section 13).
+- Clarified in `README.md` that running the automated quick start installer (`install.ps1`) does not require installing any prerequisites beforehand (all dependencies are checked and installed automatically via `winget`).
+- Added comprehensive root cause analysis and technical mitigation documentation to `docs/BUGS_AND_GOTCHAS.md` (Sections 13 & 14).
 
 ---
 
