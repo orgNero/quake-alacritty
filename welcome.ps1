@@ -1,4 +1,4 @@
-# Quake Alacritty - In-Terminal First-Run Welcome Banner & Cheat Sheet
+﻿# Quake Alacritty - In-Terminal Welcome Banner & Cheat Sheet
 [CmdletBinding()]
 param()
 
@@ -13,6 +13,21 @@ function Show-QuakeCheatsheet {
         if (Test-Path $localConfig) { $configPath = $localConfig }
     }
 
+    $chSection  = [string][char]0x00A7  # §
+    $chBullet   = [string][char]0x2022  # •
+    $chBolt     = [string][char]0x26A1  # ⚡
+    $chBulb     = [char]::ConvertFromUtf32(0x1F4A1) # 💡
+
+    # Box-drawing glyphs defined as strings for cross-version string multiplication & encoding safety
+    $chTopLeft  = [string][char]0x250C  # ┌
+    $chHoriz    = [string][char]0x2500  # ─
+    $chTopRight = [string][char]0x2510  # ┐
+    $chVert     = [string][char]0x2502  # │
+    $chTLeft    = [string][char]0x251C  # ├
+    $chTRight   = [string][char]0x2524  # ┤
+    $chBotLeft  = [string][char]0x2514  # └
+    $chBotRight = [string][char]0x2518  # ┘
+
     # Helper: Convert AHK shortcut notation to human-readable label
     function Convert-AhkKey([string]$ahkKey, [string]$defaultLabel) {
         if (-not $ahkKey) { return $defaultLabel }
@@ -25,7 +40,7 @@ function Show-QuakeCheatsheet {
 
         $key = $ahkKey -replace '[\#\^\!\+]', ''
         switch ($key.ToLower()) {
-            'sc029' { $key = '§' }
+            'sc029' { $key = [string][char]0x00A7 }
             'enter' { $key = 'Enter' }
             'space' { $key = 'Space' }
             'left'  { $key = 'Left' }
@@ -40,7 +55,7 @@ function Show-QuakeCheatsheet {
 
     # Default hotkey mapping (fallback if config is absent or partial)
     $hotkeys = @{
-        ToggleVisor = "Win + §"
+        ToggleVisor = ("Win + " + [string][char]0x00A7)
         SplitWindow = "Alt + Enter"
         CloseWindow = "Alt + W"
         Retile      = "Alt + R"
@@ -64,7 +79,7 @@ function Show-QuakeCheatsheet {
                     $k = $Matches[1].Trim()
                     $v = $Matches[2].Trim()
                     switch ($k) {
-                        'ToggleVisor' { $hotkeys.ToggleVisor = Convert-AhkKey $v 'Win + §' }
+                        'ToggleVisor' { $hotkeys.ToggleVisor = Convert-AhkKey $v ("Win + " + [string][char]0x00A7) }
                         'SplitWindow' { $hotkeys.SplitWindow = Convert-AhkKey $v 'Alt + Enter' }
                         'CloseWindow' { $hotkeys.CloseWindow = Convert-AhkKey $v 'Alt + W' }
                         'Retile'      { $hotkeys.Retile      = Convert-AhkKey $v 'Alt + R' }
@@ -108,24 +123,24 @@ function Show-QuakeCheatsheet {
 
     $boxWidth = 74
     Write-Host ""
-    Write-Host ($cBorder + "┌" + ("─" * ($boxWidth - 2)) + "┐" + $cReset)
+    Write-Host ($cBorder + $chTopLeft + ($chHoriz * ($boxWidth - 2)) + $chTopRight + $cReset)
     
     # Title row
-    $titleLeft  = "  ⚡ Quake Alacritty"
+    $titleLeft  = "  " + $chBolt + " Quake Alacritty"
     $titleRight = "Quickstart Cheat Sheet  "
     $pad = $boxWidth - 2 - $titleLeft.Length - $titleRight.Length - 3
     if ($pad -lt 1) { $pad = 1 }
-    Write-Host ($cBorder + "│" + $cTitle + $titleLeft + " " + $cSub + "• " + $titleRight + (" " * $pad) + $cBorder + "│" + $cReset)
+    Write-Host ($cBorder + $chVert + $cTitle + $titleLeft + " " + $cSub + $chBullet + " " + $titleRight + (" " * $pad) + $cBorder + $chVert + $cReset)
     
-    Write-Host ($cBorder + "├" + ("─" * ($boxWidth - 2)) + "┤" + $cReset)
+    Write-Host ($cBorder + $chTLeft + ($chHoriz * ($boxWidth - 2)) + $chTRight + $cReset)
     
     # Header row
     $headerKey = "  Shortcut"
     $headerAct = "Action"
     $hPad = 26 - $headerKey.Length
     $hPadEnd = $boxWidth - 2 - 26 - $headerAct.Length
-    Write-Host ($cBorder + "│" + $cYellow + $headerKey + (" " * $hPad) + $cTitle + $headerAct + (" " * $hPadEnd) + $cBorder + "│" + $cReset)
-    Write-Host ($cBorder + "├" + ("─" * ($boxWidth - 2)) + "┤" + $cReset)
+    Write-Host ($cBorder + $chVert + $cYellow + $headerKey + (" " * $hPad) + $cTitle + $headerAct + (" " * $hPadEnd) + $cBorder + $chVert + $cReset)
+    Write-Host ($cBorder + $chTLeft + ($chHoriz * ($boxWidth - 2)) + $chTRight + $cReset)
 
     foreach ($item in $items) {
         $k = "  " + $item.Key
@@ -134,18 +149,18 @@ function Show-QuakeCheatsheet {
         if ($kPad -lt 1) { $kPad = 1 }
         $aPad = $boxWidth - 2 - 26 - $a.Length
         if ($aPad -lt 1) { $aPad = 1 }
-        Write-Host ($cBorder + "│" + $cKey + $k + (" " * $kPad) + $cAction + $a + (" " * $aPad) + $cBorder + "│" + $cReset)
+        Write-Host ($cBorder + $chVert + $cKey + $k + (" " * $kPad) + $cAction + $a + (" " * $aPad) + $cBorder + $chVert + $cReset)
     }
 
-    Write-Host ($cBorder + "├" + ("─" * ($boxWidth - 2)) + "┤" + $cReset)
-    $tipPrefix = "  💡 Tip: Type '"
+    Write-Host ($cBorder + $chTLeft + ($chHoriz * ($boxWidth - 2)) + $chTRight + $cReset)
+    $tipPrefix = "  " + $chBulb + " Tip: Type '"
     $tipCmd    = "quake-help"
     $tipSuffix = "' anytime to redisplay this cheat sheet."
     $tipTotalLen = $tipPrefix.Length + $tipCmd.Length + $tipSuffix.Length
     $tipPad = $boxWidth - 2 - $tipTotalLen
     if ($tipPad -lt 0) { $tipPad = 0 }
-    Write-Host ($cBorder + "│" + $cYellow + "  💡 " + $cSub + "Tip: Type '" + $cKey + $tipCmd + $cSub + "' anytime to redisplay this cheat sheet." + (" " * $tipPad) + $cBorder + "│" + $cReset)
-    Write-Host ($cBorder + "└" + ("─" * ($boxWidth - 2)) + "┘" + $cReset)
+    Write-Host ($cBorder + $chVert + $cYellow + "  " + $chBulb + " " + $cSub + "Tip: Type '" + $cKey + $tipCmd + $cSub + "' anytime to redisplay this cheat sheet." + (" " * $tipPad) + $cBorder + $chVert + $cReset)
+    Write-Host ($cBorder + $chBotLeft + ($chHoriz * ($boxWidth - 2)) + $chBotRight + $cReset)
     Write-Host ""
 }
 

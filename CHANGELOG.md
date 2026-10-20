@@ -43,7 +43,7 @@ _None_
 
 ## Fixes
 ### Major
-_None_
+- **PowerShell 5.1 ANSI Quote Parsing Fix (`welcome.ps1`)**: Resolved parser crash (`Unexpected token 'Œ'`) occurring in Windows PowerShell 5.1 when executing `welcome.ps1`. Replaced raw multibyte Unicode box characters with ASCII-safe `[string][char]0x...` definitions and ensured UTF-8 with BOM (`EF BB BF`) output encoding.
 ### Minor
 _None_
 
