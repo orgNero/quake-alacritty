@@ -200,3 +200,28 @@ To launch into the true interactive user desktop from an agent shell:
    Use `!^r::Reload()` so the script reloads from within the interactive desktop, never going through external shell runners.
 
 
+
+---
+
+## 11. Windows PowerShell 5.1 ANSI Encoding & Right Double Quote Syntax Breakage
+
+### Symptom
+- Spawning a terminal or running `welcome.ps1` fails with parser errors:
+  ```
+  Unexpected token 'Œ" + ("â”€"' in expression or statement.
+  Missing closing ')' in expression.
+  Missing closing '}' in statement block or type definition.
+  ```
+
+### Root Cause
+By default, Windows PowerShell 5.1 (`powershell.exe`) opens `.ps1` script files that lack a byte-order mark (BOM) using the legacy system ANSI code page (typically Windows-1252), rather than UTF-8.
+In UTF-8, the box-drawing character `┌` is encoded as the 3-byte sequence `0xE2 0x94 0x8C`. In Windows-1252:
+- `0xE2` is `â`
+- `0x94` is `”` (`U+201D` Right Double Quotation Mark)
+- `0x8C` is `Œ`
+
+Because PowerShell treats Unicode right double quotation marks (`”`) as matching double quote delimiters, it interprets byte `0x94` as closing the string literal early, leaving `Œ` as an unquoted token outside the string and immediately throwing fatal parser errors.
+
+### Established Solution
+1. **ASCII-Safe Unicode Codepoints**: Never use raw multibyte Unicode box literals inside `.ps1` string concatenation. Define glyphs programmatically using `[string][char]0x250C` (`┌`), `[string][char]0x2500` (`─`), `[string][char]0x00A7` (`§`), etc.
+2. **UTF-8 with BOM (`EF BB BF`) Enforcement**: Always save `.ps1` files using `New-Object System.Text.UTF8Encoding($true)` so PowerShell 5.1 reliably recognizes the UTF-8 encoding.
