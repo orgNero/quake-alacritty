@@ -1,4 +1,4 @@
-﻿# Quake Alacritty - In-Terminal First-Run Welcome Banner & Cheat Sheet
+# Quake Alacritty - In-Terminal First-Run Welcome Banner & Cheat Sheet
 [CmdletBinding()]
 param()
 
@@ -95,7 +95,7 @@ function Show-QuakeCheatsheet {
     $cReset   = $esc + "[0m"
 
     $items = @(
-        @{ Key = $hotkeys.ToggleVisor; Action = "Toggle Visor (mouse-aware display hop)" },
+        @{ Key = $hotkeys.ToggleVisor; Action = "Toggle Visor (mouse-aware screen toggle)" },
         @{ Key = $hotkeys.SplitWindow; Action = "Split window (1 -> 2 -> 3 -> 4 quad grid)" },
         @{ Key = $hotkeys.CloseWindow; Action = "Close active split & auto-rebalance" },
         @{ Key = $hotkeys.Retile;      Action = "Force re-tile & seam alignment" },
