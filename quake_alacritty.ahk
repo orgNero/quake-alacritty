@@ -14,7 +14,7 @@ global g_BorderGap          := 2
 global g_BorderColor        := "38bdf8"
 global g_VisorHeightPercent := 0.40
 global g_MultiMonitorMode   := "isolated"
-global g_ShowHelpOnStart    := "always"
+global g_ShowHelpOnStart    := "tip"
 global g_FirstRun           := false
 
 ; Layout settings
@@ -85,15 +85,15 @@ LoadConfig()
         else
             g_MultiMonitorMode := "isolated"
 
-        helpVal := Trim(StrLower(IniRead(g_ConfigFile, "General", "ShowHelpOnStart", "always")))
-        if (helpVal == "always" || helpVal == "first-run" || helpVal == "never")
+        helpVal := Trim(StrLower(IniRead(g_ConfigFile, "General", "ShowHelpOnStart", "tip")))
+        if (helpVal == "tip" || helpVal == "banner" || helpVal == "none" || helpVal == "first-run")
             g_ShowHelpOnStart := helpVal
-        else if (helpVal == "true" || helpVal == "1")
-            g_ShowHelpOnStart := "always"
+        else if (helpVal == "always" || helpVal == "true" || helpVal == "1")
+            g_ShowHelpOnStart := "tip"
         else if (helpVal == "false" || helpVal == "0")
-            g_ShowHelpOnStart := "never"
+            g_ShowHelpOnStart := "none"
         else
-            g_ShowHelpOnStart := "always"
+            g_ShowHelpOnStart := "tip"
     }
 
     ; 3. [Appearance]
@@ -1367,7 +1367,7 @@ GetDefaultShell()
 LaunchTerminalProcess()
 {
     global g_ShowHelpOnStart, g_FirstRun, g_ConfigFile
-    shouldShowHelp := (g_ShowHelpOnStart == "always") || (g_ShowHelpOnStart == "first-run" && g_FirstRun)
+    shouldShowHelp := (g_ShowHelpOnStart == "tip" || g_ShowHelpOnStart == "banner") || (g_ShowHelpOnStart == "first-run" && g_FirstRun)
 
     if (shouldShowHelp)
     {
@@ -1380,7 +1380,8 @@ LaunchTerminalProcess()
         if (welcomeScript != "")
         {
             shellProg := GetDefaultShell()
-            Run(Format('alacritty.exe -e {1} -NoLogo -NoExit -ExecutionPolicy Bypass -File "{2}"', shellProg, welcomeScript))
+            argFlag := (g_ShowHelpOnStart == "tip") ? " -TipOnly" : ""
+            Run(Format('alacritty.exe -e {1} -NoLogo -NoExit -ExecutionPolicy Bypass -File "{2}"{3}', shellProg, welcomeScript, argFlag))
 
             if (g_ShowHelpOnStart == "first-run" && g_FirstRun)
             {
