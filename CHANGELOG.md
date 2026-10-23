@@ -7,6 +7,31 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.11.3] - 2026-10-23
+
+## Features
+### Major
+_None_
+### Minor
+_None_
+
+## Fixes
+### Major
+_None_
+### Minor
+- **`Ctrl + Insert` Copy Support**: Alacritty ships no default `Ctrl + Insert` binding, so copying a mouse selection silently did nothing (the keystroke was forwarded to the shell as an unmapped escape sequence). Added explicit `[keyboard]` bindings: `Ctrl + Insert` → `Copy` and `Shift + Insert` → `Paste`, matching Windows Terminal and standard Bash terminal behavior.
+
+## Window Management & Multi-Monitor
+_None_
+
+## Styling & Appearance
+_None_
+
+## Configuration & Tooling
+- Documented the clipboard shortcuts (`Ctrl + Insert` / `Ctrl + Shift + C`, `Shift + Insert` / `Ctrl + Shift + V`) in the `README.md` shortcuts reference.
+
+---
+
 ## [0.11.2] - 2026-10-23
 
 ## Features
