@@ -321,4 +321,5 @@ if ($ahkExe -and (Test-Path $ahkExe)) {
 }
 
 Write-Host "`n✨ Installation complete!" -ForegroundColor Cyan
-Write-Host "💡 To uninstall anytime, run: powershell -File `"$TargetDir\uninstall.ps1`"`n" -ForegroundColor DarkGray
+Write-Host "💡 To uninstall anytime, run: powershell -File `"$TargetDir\uninstall.ps1`"" -ForegroundColor DarkGray
+Write-Host "💬 Have feedback, bugs, or feature ideas? Open an issue: https://github.com/orgNero/quake-alacritty/issues`n" -ForegroundColor DarkGray

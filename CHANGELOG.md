@@ -14,6 +14,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 _None_
 ### Minor
 - **Feature Request Issue Template (`.github/ISSUE_TEMPLATE/feature_request.md`)**: Added a structured GitHub issue template to guide user feature proposals. Includes dedicated sections for problem/workflow friction, proposed solution, configuration settings, alternatives considered, technical considerations/OS friction, and mockups.
+- **System Tray Context Menu (`A_TrayMenu`)**: Added a native Windows notification area context menu to `quake_alacritty.ahk` providing quick 1-click access to report bugs/request features, open documentation, reload the script, or exit.
+- **In-Session Feedback Reminders (`welcome.ps1`, `install.ps1`)**: Added subtle, non-intrusive issue tracker reminders to the bottom of the `quake-help` cheatsheet, direct issue link in `quake-env` clipboard diagnostics, and post-installation completion summary in `install.ps1`.
+- **In-Repo Feedback & Issue Guidelines (`README.md`)**: Added dedicated `## 💬 Feedback & Issues` section with direct template links and repository header status badges.
 
 ## Fixes
 ### Major
@@ -29,6 +32,7 @@ _None_
 
 ## Configuration & Tooling
 - Added `.github/ISSUE_TEMPLATE/feature_request.md` pre-populated with Conventional Commits title prefix (`feat: `) and `enhancement` label.
+- Updated `install.ps1` completion output to surface issue reporting instructions alongside the uninstaller command.
 
 ---
 
