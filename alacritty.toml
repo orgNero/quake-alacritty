@@ -19,3 +19,11 @@ size = 11.0
 [font.normal]
 family = "JetBrainsMono Nerd Font"
 style = "Regular"
+
+# Clipboard shortcuts (Windows Terminal / common terminal convention)
+# Alacritty has no Ctrl+Insert binding by default, so copy would silently do nothing.
+[keyboard]
+bindings = [
+  { key = "Insert", mods = "Control", action = "Copy" },
+  { key = "Insert", mods = "Shift", action = "Paste" },
+]
