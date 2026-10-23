@@ -2308,6 +2308,21 @@ WatchdogCheck()
     }
 }
 
+; Configures the system notification area (tray) context menu
+SetupTrayMenu()
+{
+    tray := A_TrayMenu
+    tray.Delete()
+    tray.Add("Quake Alacritty", (*) => Run("https://github.com/orgNero/quake-alacritty"))
+    tray.Disable("Quake Alacritty")
+    tray.Add()
+    tray.Add("Report Bug / Request Feature", (*) => Run("https://github.com/orgNero/quake-alacritty/issues/new/choose"))
+    tray.Add("Documentation & Shortcuts", (*) => Run("https://github.com/orgNero/quake-alacritty#readme"))
+    tray.Add()
+    tray.Add("Reload Quake Alacritty", (*) => Reload())
+    tray.Add("Exit", (*) => ExitApp())
+}
+
 ; -------------------------------------------------------------
 ; Script Initialization
 ; -------------------------------------------------------------
@@ -2315,6 +2330,7 @@ LoadConfig()
 RegisterHotkeys()
 OnMessage(0x007E, OnDisplayChange)
 A_IconTip := "Quake Alacritty"
+SetupTrayMenu()
 
 ; Sync any existing windows and restore layout if already visible on startup/reload
 SyncMonitorWindows()

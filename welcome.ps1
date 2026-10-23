@@ -183,6 +183,7 @@ function global:Show-QuakeCheatsheet {
     if ($tipPad -lt 0) { $tipPad = 0 }
     Write-Host ($cBorder + $chVert + $cYellow + "  " + $chBulb + " " + $cSub + "Tip: Type '" + $cKey + $tipCmd + $cSub + "' anytime to redisplay this cheat sheet." + (" " * $tipPad) + $cBorder + $chVert + $cReset)
     Write-Host ($cBorder + $chBotLeft + ($chHoriz * ($boxWidth - 2)) + $chBotRight + $cReset)
+    Write-Host ("  " + $cSub + "Report bugs & suggest features: " + $cBorder + "https://github.com/orgNero/quake-alacritty/issues" + $cReset)
     Write-Host ""
 }
 
@@ -246,6 +247,7 @@ function global:Show-QuakeEnvironment {
                 $md | clip.exe
             }
             Write-Host "  ✨ Copied environment info to clipboard!" -ForegroundColor Green
+            Write-Host "  💡 Open an issue: https://github.com/orgNero/quake-alacritty/issues/new/choose" -ForegroundColor DarkGray
             Write-Host ""
         } catch {}
     }
