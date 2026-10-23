@@ -7,6 +7,31 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.11.2] - 2026-10-23
+
+## Features
+### Major
+_None_
+### Minor
+- **Feature Request Issue Template (`.github/ISSUE_TEMPLATE/feature_request.md`)**: Added a structured GitHub issue template to guide user feature proposals. Includes dedicated sections for problem/workflow friction, proposed solution, configuration settings, alternatives considered, technical considerations/OS friction, and mockups.
+
+## Fixes
+### Major
+_None_
+### Minor
+_None_
+
+## Window Management & Multi-Monitor
+_None_
+
+## Styling & Appearance
+_None_
+
+## Configuration & Tooling
+- Added `.github/ISSUE_TEMPLATE/feature_request.md` pre-populated with Conventional Commits title prefix (`feat: `) and `enhancement` label.
+
+---
+
 ## [0.11.1] - 2026-10-20
 
 ## Features
