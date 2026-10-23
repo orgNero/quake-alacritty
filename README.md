@@ -4,6 +4,9 @@ A sleek, macOS/i3-style drop-down ("visor") terminal setup for **Windows 11** bu
 
 Features mouse-aware multi-monitor detection, dynamic 2×2 quad grid tiling, acrylic background blur, and pixel-perfect DPI-aware click-through cyan seam dividers.
 
+[![GitHub Issues](https://img.shields.io/github/issues/orgNero/quake-alacritty?color=38bdf8)](https://github.com/orgNero/quake-alacritty/issues)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+
 ---
 
 ## 📸 Preview
@@ -249,6 +252,17 @@ The uninstaller:
 - Removes the Windows Startup shortcut.
 - Cleans up the `quake-help` and `quake-env` commands from your PowerShell `$PROFILE`.
 - Removes deployed application files while giving you the option to keep or delete your custom configuration files (`config.ini` and `alacritty.toml`).
+
+---
+
+## 💬 Feedback & Issues
+
+Have an idea for a new feature, workflow improvement, or encountered a bug?
+
+- 🐛 **Report a Bug**: [Open Bug Report](https://github.com/orgNero/quake-alacritty/issues/new?template=bug_report.md)
+  > 💡 *Quick Tip*: Run `quake-env` in your terminal to automatically capture your Windows build, monitor resolution, and software versions directly to your clipboard before filing!
+- 💡 **Request a Feature**: [Open Feature Request](https://github.com/orgNero/quake-alacritty/issues/new?template=feature_request.md)
+- 📋 **All Issues & Discussions**: [Browse GitHub Issues](https://github.com/orgNero/quake-alacritty/issues)
 
 ---
 
