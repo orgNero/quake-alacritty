@@ -64,6 +64,8 @@ Features mouse-aware multi-monitor detection, dynamic 2×2 quad grid tiling, acr
 | **`Alt + Shift + Space`** | Inside Alacritty | Rotate all terminal pane positions cyclically clockwise |
 | **`Alt + Ctrl + Left` / `Right`** | Inside Alacritty | Move / swap entire visor workspace across monitors (spatial order) |
 | **`Alt + Ctrl + R`** | Inside Alacritty | Instant in-process script reload (development & config refresh) |
+| **`Ctrl + Insert`** / **`Ctrl + Shift + C`** | Inside Alacritty | Copy selected text to the clipboard |
+| **`Shift + Insert`** / **`Ctrl + Shift + V`** | Inside Alacritty | Paste clipboard contents into the terminal |
 
 ---
 
