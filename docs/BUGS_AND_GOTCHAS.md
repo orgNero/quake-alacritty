@@ -295,3 +295,23 @@ Always link `%APPDATA%\alacritty` to the repository directory using symbolic lin
 cmd /c "del `"%APPDATA%\alacritty\quake_alacritty.ahk`" && mklink `"%APPDATA%\alacritty\quake_alacritty.ahk`" `"C:\Users\maxve\repos\quake-alacritty\quake_alacritty.ahk`""
 ```
 With symbolic links in place, `A_ScriptFullPath` resolves directly to the repository file, guaranteeing that in-process reload (`Alt + Ctrl + R`) immediately executes live code edits.
+
+---
+
+## 15. Installer Upgrade & Uninstall Teardown Gotchas
+
+### Symptom
+- Re-running `install.ps1` behaved like a fresh install (config overwritten, no upgrade notice).
+- Running AutoHotkey instances were never stopped by the installer or uninstaller, or were force-killed leaving orphan click-through seam overlays.
+- Uninstalling left `%APPDATA%\alacritty` and a stale "Installed Apps" entry behind.
+
+### Root Cause
+- `Get-Process` exposes **no** `CommandLine` property in Windows PowerShell 5.1, so `Where-Object { $_.CommandLine -like '*quake_alacritty*' }` silently matched nothing. Process discovery must go through `Get-CimInstance Win32_Process -Filter "Name='AutoHotkey64.exe'"` and validate the parsed `.ahk` path.
+- Force-killing AutoHotkey skips `OnExit`, leaving the script's seam divider GUIs behind.
+- `.install-state.json`, `VERSION`, `CONFIG_SCHEMA` and timestamped `.bak` files are intentionally left in the deploy folder, so "delete the folder only when empty" never fires.
+
+### Established Solution
+- `quake_common.ps1` is dot-sourced by both scripts and provides `Get-QuakeAhkProcesses`, `Stop-QuakeAhkProcess`, install-state and version helpers.
+- Teardown posts `WM_CLOSE` to the process windows first; `quake_alacritty.ahk` handles `WM_CLOSE` by exiting through `OnExit` (`CleanupOnExit` destroys all dividers). A force-kill fallback runs only after the grace period.
+- `uninstall.ps1` deletes every known artifact explicitly (including the `HKCU\...\Uninstall\QuakeAlacritty` key) instead of relying on folder emptiness.
+- User `config.ini` is merged append-only (missing keys/sections only) and every rewrite is preceded by a timestamped `.bak`; `-ResetConfig` is the only path that replaces it.

@@ -17,6 +17,7 @@ global g_VisorHeightPercent := 0.40
 global g_MultiMonitorMode   := "isolated"
 global g_ShowHelpOnStart    := "tip"
 global g_FirstRun           := false
+global g_AppVersion         := "unknown"
 
 ; Layout settings
 global g_TileLayout         := "bottom"
@@ -2313,8 +2314,8 @@ SetupTrayMenu()
 {
     tray := A_TrayMenu
     tray.Delete()
-    tray.Add("Quake Alacritty", (*) => Run("https://github.com/orgNero/quake-alacritty"))
-    tray.Disable("Quake Alacritty")
+    tray.Add("Quake Alacritty v" . g_AppVersion, (*) => Run("https://github.com/orgNero/quake-alacritty"))
+    tray.Disable("Quake Alacritty v" . g_AppVersion)
     tray.Add()
     tray.Add("Report Bug / Request Feature", (*) => Run("https://github.com/orgNero/quake-alacritty/issues/new/choose"))
     tray.Add("Documentation & Shortcuts", (*) => Run("https://github.com/orgNero/quake-alacritty#readme"))
@@ -2323,13 +2324,48 @@ SetupTrayMenu()
     tray.Add("Exit", (*) => ExitApp())
 }
 
+; Reads the deployed VERSION marker (repo or %APPDATA%\alacritty) so the version
+; is never duplicated as a hardcoded constant in this script.
+ReadAppVersion()
+{
+    global g_AppVersion
+    versionPath := A_ScriptDir . "\VERSION"
+    if (!FileExist(versionPath))
+        return
+    try {
+        raw := Trim(FileRead(versionPath, "UTF-8"))
+        if RegExMatch(raw, "^\d+\.\d+\.\d+", &m)
+            g_AppVersion := m[0]
+    }
+}
+
+; -------------------------------------------------------------
+; Graceful Shutdown
+; -------------------------------------------------------------
+; Destroys seam overlays so a graceful exit (tray menu, installer upgrade,
+; logoff) never leaves orphan click-through windows behind.
+CleanupOnExit(ExitReason, ExitCode)
+{
+    try ClearDividers(0)
+}
+
+; WM_CLOSE to the script's main window (used by install.ps1 / uninstall.ps1 for a
+; graceful quit handshake before the force-kill fallback) exits through OnExit.
+OnCloseMessage(wParam, lParam, msg, hwnd)
+{
+    ExitApp()
+}
+
 ; -------------------------------------------------------------
 ; Script Initialization
 ; -------------------------------------------------------------
 LoadConfig()
+ReadAppVersion()
 RegisterHotkeys()
 OnMessage(0x007E, OnDisplayChange)
-A_IconTip := "Quake Alacritty"
+OnMessage(0x0010, OnCloseMessage)
+OnExit(CleanupOnExit)
+A_IconTip := "Quake Alacritty v" . g_AppVersion
 SetupTrayMenu()
 
 ; Sync any existing windows and restore layout if already visible on startup/reload
