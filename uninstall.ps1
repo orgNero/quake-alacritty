@@ -111,10 +111,11 @@ $bashrcPath = Join-Path $env:USERPROFILE ".bashrc"
 if (Test-Path $bashrcPath) {
     try {
         $bashrcContent = Get-Content $bashrcPath -Raw -ErrorAction SilentlyContinue
-        if ($bashrcContent -match 'quake-help|quake-env') {
+        if ($bashrcContent -match 'quake-help|quake-env|QUAKE_SHOW_HELP') {
             $cleaned = $bashrcContent -replace '(?m)^\s*# Quake Alacritty Cheat Sheet.*\s*[\r\n]+', ''
             $cleaned = $cleaned -replace '(?m)^\s*quake-help\(\)\s*\{[^}]*\}\s*[\r\n]+', ''
             $cleaned = $cleaned -replace '(?m)^\s*quake-env\(\)\s*\{[^}]*\}\s*[\r\n]+', ''
+            $cleaned = $cleaned -replace '(?s)if \[ -n "\$QUAKE_SHOW_HELP" \].*?fi\s*[\r\n]*', ''
             $cleaned = $cleaned.TrimEnd() + "`n"
             [System.IO.File]::WriteAllText($bashrcPath, $cleaned, (New-Object System.Text.UTF8Encoding($false)))
             Write-Host "  Removed 'quake-help' and 'quake-env' registrations from $bashrcPath." -ForegroundColor Green

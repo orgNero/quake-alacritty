@@ -1616,6 +1616,10 @@ LaunchTerminalProcess()
         }
     }
 
+    ; For non-PowerShell shells (Git Bash, WSL), pass help mode via environment variable
+    helpMode := shouldShowHelp ? ((g_ShowHelpOnStart == "first-run") ? "tip" : g_ShowHelpOnStart) : "none"
+    EnvSet("QUAKE_SHOW_HELP", helpMode)
+
     ; Clean first-run flag if first-run was triggered on a non-PowerShell shell
     if (g_FirstRun)
     {

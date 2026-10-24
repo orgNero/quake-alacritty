@@ -23,7 +23,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - **`-VerifyVersion`**: Fails with a clear message when `VERSION`, the newest `CHANGELOG.md` heading and (when tags exist) the nearest git tag disagree.
 - **Configurable Starting Directory (`StartingDirectory=~`)**: Terminal windows previously inherited the AutoHotkey script's working directory (`%APPDATA%\alacritty`). Now defaults to the user home directory (`%USERPROFILE%` / `~`) across all shells (PowerShell, WSL, Git Bash) and is fully customizable in `config.ini` (`StartingDirectory` supports `~`, environment variables like `%USERPROFILE%\repos`, or absolute paths with safe fallback).
 
-- **Git Bash `quake-help` and `quake-env` Support**: Registered `quake-help` and `quake-env` in `~/.bashrc` (in addition to PowerShell's `$PROFILE`) during installation, allowing Git Bash users to view the quickstart cheat sheet and copy environment diagnostic reports directly from MSYS2 bash sessions. `uninstall.ps1` cleanly removes both registrations.
+- **Git Bash `quake-help` and Startup Hint Support**: Extended `ShowHelpOnStart` to Git Bash sessions via environment signaling (`QUAKE_SHOW_HELP`) and registered `quake-help` / `quake-env` in `~/.bashrc`. Git Bash terminal launches now display the starter hint (`💡 Tip: Type 'quake-help' to view keyboard shortcuts`) matching PowerShell parity without startup lag. `uninstall.ps1` cleanly removes both registrations.
 ## Fixes
 ### Major
 - **Multi-Path Git Bash Discovery & Startup Crash Prevention (`install.ps1`)**:
