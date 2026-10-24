@@ -24,7 +24,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## Fixes
 ### Major
-_None_
+- **Multi-Path Git Bash Discovery & Startup Crash Prevention (`install.ps1`)**:
+  - `install.ps1` previously only scanned hardcoded standard paths for `bash.exe` and defaulted to `C:\Program Files\Git\bin\bash.exe` if not found. Systems with custom Git install directories (e.g. `C:\Users\<user>\Program\Git`) received an invalid path in `alacritty.toml`, causing Alacritty to crash immediately upon launch with OS error 5 (`Access Denied`).
+  - Added robust detection: registry queries (`HKLM`/`HKCU` `Software\GitForWindows\InstallPath`), deriving install root from `git.exe` in PATH (`Get-Command git.exe`), common installation directories, and interactive validation/fallback before modifying `alacritty.toml`.
+- **AutoHotkey `TargetError` Crash Guard on Visor Open (`quake_alacritty.ahk`)**:
+  - If a terminal process crashes or exits prematurely during cold start (e.g. from an invalid shell binary or early exit), AutoHotkey threw an unhandled `TargetError: Target window not found` on `WinSetAlwaysOnTop(1, "ahk_id " hwnd)` / `WinShow` / `WinMove`.
+  - Wrapped `WinShow`, `WinSetAlwaysOnTop`, `WinMove`, `WinHide`, and `WinActivate` in defensive `try` blocks and guarded window assignment arrays with `WinExist` to prevent AHK runtime modal crashes.
+
 ### Minor
 - **Headless "keep" Configuration**: `keep` is now accepted by the `-Shell` `ValidateSet`, so scripted/CI upgrades can preserve configuration. Previously only the interactive menu could select it.
 - **Silent `ToggleVisor` Rewrite**: The toggle hotkey is only rewritten when `-KeyboardLayout` is explicitly supplied (or chosen interactively); preserving configuration no longer silently resets a user-rebound hotkey to `#sc029`.

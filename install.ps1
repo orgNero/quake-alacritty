@@ -601,30 +601,77 @@ if ($PSBoundParameters.ContainsKey('Shell')) {
     $shellWasChosen = ($Shell -ne "keep")
 }
 
-$gitBashPath = ""
-$commonGitPaths = @(
-    "C:\Program Files\Git\bin\bash.exe",
-    "$env:LOCALAPPDATA\Programs\Git\bin\bash.exe",
-    "C:\Program Files (x86)\Git\bin\bash.exe"
-)
-foreach ($path in $commonGitPaths) {
-    if (Test-Path $path) {
-        $gitBashPath = $path
-        break
+function Find-GitBashPath {
+    # 1. Registry detection (Git for Windows standard installer keys)
+    $regKeys = @(
+        "HKLM:\SOFTWARE\GitForWindows",
+        "HKCU:\SOFTWARE\GitForWindows",
+        "HKLM:\SOFTWARE\WOW6432Node\GitForWindows"
+    )
+    foreach ($regKey in $regKeys) {
+        $installPath = Get-ItemPropertyValue -Path $regKey -Name "InstallPath" -ErrorAction SilentlyContinue
+        if ($installPath) {
+            $cand = Join-Path $installPath "bin\bash.exe"
+            if (Test-Path $cand) { return $cand }
+            $candUsr = Join-Path $installPath "usr\bin\bash.exe"
+            if (Test-Path $candUsr) { return $candUsr }
+        }
     }
-}
-if (-not $gitBashPath) {
+
+    # 2. Derive from git.exe in PATH (handles custom installation directories)
+    $cmdGit = Get-Command git.exe -ErrorAction SilentlyContinue
+    if ($cmdGit -and $cmdGit.Source) {
+        $cmdDir = Split-Path $cmdGit.Source -Parent
+        $gitRoot = Split-Path $cmdDir -Parent
+        $gitRootCandidates = @(
+            (Join-Path $gitRoot "bin\bash.exe"),
+            (Join-Path $gitRoot "usr\bin\bash.exe"),
+            (Join-Path $cmdDir "..\bin\bash.exe"),
+            (Join-Path $cmdDir "..\usr\bin\bash.exe"),
+            (Join-Path $cmdDir "bash.exe")
+        )
+        foreach ($cand in $gitRootCandidates) {
+            if ($cand -and (Test-Path $cand)) {
+                return (Resolve-Path $cand).Path
+            }
+        }
+    }
+
+    # 3. Standard common installation paths
+    $commonGitPaths = @(
+        "C:\Program Files\Git\bin\bash.exe",
+        "$env:LOCALAPPDATA\Programs\Git\bin\bash.exe",
+        "C:\Program Files (x86)\Git\bin\bash.exe",
+        "$env:ProgramW6432\Git\bin\bash.exe",
+        "C:\Program Files\Git\usr\bin\bash.exe",
+        "$env:LOCALAPPDATA\Programs\Git\usr\bin\bash.exe"
+    )
+    foreach ($cand in $commonGitPaths) {
+        if ($cand -and (Test-Path $cand)) {
+            return $cand
+        }
+    }
+
+    # 4. Command bash.exe in PATH (skip WindowsApps 0-byte execution alias stub)
     $cmdBash = Get-Command bash.exe -ErrorAction SilentlyContinue
-    if ($cmdBash -and $cmdBash.Source -like "*Git*") {
-        $gitBashPath = $cmdBash.Source
+    if ($cmdBash -and $cmdBash.Source -and ($cmdBash.Source -notlike "*WindowsApps*") -and (Test-Path $cmdBash.Source)) {
+        return $cmdBash.Source
     }
+
+    return ""
 }
+
+$gitBashPath = Find-GitBashPath
 
 if ($isInteractive -and -not $selectedShell) {
     Write-Host "`n[2/4] Choose your default terminal shell:" -ForegroundColor Yellow
     Write-Host "  [1] PowerShell (Default - Windows PowerShell / pwsh)" -ForegroundColor Cyan
     Write-Host "  [2] WSL Bash   (Linux / Ubuntu via wsl.exe)" -ForegroundColor Cyan
-    Write-Host "  [3] Git Bash   (MSYS2 bash.exe)" -ForegroundColor Cyan
+    if ($gitBashPath) {
+        Write-Host "  [3] Git Bash   (MSYS2 bash.exe)" -ForegroundColor Cyan
+    } else {
+        Write-Host "  [3] Git Bash   (MSYS2 bash.exe - not found)" -ForegroundColor DarkGray
+    }
     Write-Host "  [4] Keep existing configuration" -ForegroundColor Cyan
 
     $shellChoice = Read-Host "`nSelect shell [1-4] (default: 1)"
@@ -646,10 +693,26 @@ if ($shellWasChosen) {
         if (-not (Get-Command wsl.exe -ErrorAction SilentlyContinue)) {
             Write-Warning "WSL was selected, but 'wsl.exe' was not found in PATH. You may need to run 'wsl --install'."
         }
+    } elseif ($selectedShell -eq "pwsh") {
+        if (-not (Get-Command pwsh.exe -ErrorAction SilentlyContinue)) {
+            Write-Warning "PowerShell 7 (pwsh.exe) was selected, but was not found in PATH. Falling back to Windows PowerShell (powershell.exe)."
+            $selectedShell = "powershell"
+        }
     } elseif ($selectedShell -eq "gitbash") {
         if (-not $gitBashPath) {
-            Write-Warning "Git Bash was selected, but 'bash.exe' was not found in standard paths. Defaulting to 'C:\Program Files\Git\bin\bash.exe'."
-            $gitBashPath = "C:\Program Files\Git\bin\bash.exe"
+            if ($isInteractive) {
+                Write-Warning "Git Bash was selected, but 'bash.exe' was not automatically found."
+                $customPath = Read-Host "Enter full path to bash.exe (or press Enter to fallback to PowerShell)"
+                if ($customPath -and (Test-Path $customPath.Trim())) {
+                    $gitBashPath = $customPath.Trim()
+                } else {
+                    Write-Warning "Valid bash.exe not provided. Falling back to PowerShell default shell."
+                    $selectedShell = "powershell"
+                }
+            } else {
+                Write-Warning "Git Bash was selected, but 'bash.exe' was not found on this system. Falling back to PowerShell to avoid terminal crash."
+                $selectedShell = "powershell"
+            }
         }
     }
 }
