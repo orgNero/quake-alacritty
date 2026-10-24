@@ -164,6 +164,8 @@ FirstRun=true
 MultiMonitorMode=isolated
 ; Help command hint on terminal launch (tip | banner | none)
 ShowHelpOnStart=tip
+; Default starting directory for newly spawned terminal windows (~ or empty defaults to user profile directory)
+StartingDirectory=~
 
 [Appearance]
 ; Seam divider thickness in pixels (1-5px)

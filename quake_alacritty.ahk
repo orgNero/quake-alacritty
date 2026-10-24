@@ -17,6 +17,7 @@ global g_VisorHeightPercent := 0.40
 global g_MultiMonitorMode   := "isolated"
 global g_ShowHelpOnStart    := "tip"
 global g_FirstRun           := false
+global g_StartingDirectory  := "~"
 global g_AppVersion         := "unknown"
 
 ; Layout settings
@@ -61,7 +62,7 @@ global g_LayoutLock            := 0
 ; Helper: Resolves configuration file location and loads user preferences
 LoadConfig()
 {
-    global g_ConfigFile, g_BorderGap, g_BorderColor, g_VisorHeightPercent, g_MultiMonitorMode, g_ShowHelpOnStart, g_FirstRun
+    global g_ConfigFile, g_BorderGap, g_BorderColor, g_VisorHeightPercent, g_MultiMonitorMode, g_ShowHelpOnStart, g_FirstRun, g_StartingDirectory
     global g_TileLayout, g_TwoPaneLayout, g_KeyCycleLayout
     global g_KeyToggleVisor, g_KeySplit, g_KeyClose, g_KeyRetile
     global g_KeyFocusLeft, g_KeyFocusRight, g_KeyFocusUp, g_KeyFocusDown
@@ -101,6 +102,9 @@ LoadConfig()
             g_ShowHelpOnStart := "none"
         else
             g_ShowHelpOnStart := "tip"
+
+        startDirVal := Trim(IniRead(g_ConfigFile, "General", "StartingDirectory", "~"))
+        g_StartingDirectory := (startDirVal != "") ? startDirVal : "~"
     }
 
     ; 3. [Appearance]
@@ -1537,10 +1541,52 @@ IsPowerShell(shellProg)
     return (InStr(shellProg, "pwsh") || InStr(shellProg, "powershell"))
 }
 
+; Helper: Resolves the starting working directory for terminal windows
+GetStartingDirectory()
+{
+    global g_StartingDirectory
+    targetDir := Trim(g_StartingDirectory)
+
+    ; Empty, "~", or default maps to user home
+    if (targetDir == "" || targetDir == "~")
+    {
+        userHome := EnvGet("USERPROFILE")
+        return (userHome != "" && DirExist(userHome)) ? userHome : A_WorkingDir
+    }
+
+    ; Expand environment variables (e.g. %USERPROFILE%\repos)
+    if InStr(targetDir, "%")
+    {
+        size := DllCall("ExpandEnvironmentStrings", "Str", targetDir, "Ptr", 0, "UInt", 0)
+        if (size > 0)
+        {
+            buf := Buffer(size * 2)
+            DllCall("ExpandEnvironmentStrings", "Str", targetDir, "Ptr", buf, "UInt", size)
+            targetDir := StrGet(buf)
+        }
+    }
+
+    ; Expand leading ~ to %USERPROFILE% (e.g. ~/repos or ~\repos)
+    if (SubStr(targetDir, 1, 2) == "~\" || SubStr(targetDir, 1, 2) == "~/")
+    {
+        userHome := EnvGet("USERPROFILE")
+        if (userHome != "")
+            targetDir := userHome . SubStr(targetDir, 2)
+    }
+
+    if (DirExist(targetDir))
+        return targetDir
+
+    ; Fallback to user home if custom directory doesn't exist
+    userHome := EnvGet("USERPROFILE")
+    return (userHome != "" && DirExist(userHome)) ? userHome : A_WorkingDir
+}
+
 ; Helper: Launches an Alacritty process, injecting welcome cheat sheet if configured and shell is PowerShell
 LaunchTerminalProcess()
 {
     global g_ShowHelpOnStart, g_FirstRun, g_ConfigFile
+    startDir := GetStartingDirectory()
     shouldShowHelp := (g_ShowHelpOnStart == "tip" || g_ShowHelpOnStart == "banner") || (g_ShowHelpOnStart == "first-run" && g_FirstRun)
 
     if (shouldShowHelp)
@@ -1557,7 +1603,7 @@ LaunchTerminalProcess()
             if (welcomeScript != "")
             {
                 argFlag := (g_ShowHelpOnStart == "tip") ? " -TipOnly" : ""
-                Run(Format('alacritty.exe -e {1} -NoLogo -NoExit -ExecutionPolicy Bypass -File "{2}"{3}', configuredShell, welcomeScript, argFlag))
+                Run(Format('alacritty.exe -e {1} -NoLogo -NoExit -ExecutionPolicy Bypass -File "{2}"{3}', configuredShell, welcomeScript, argFlag), startDir)
 
                 if (g_ShowHelpOnStart == "first-run" && g_FirstRun)
                 {
@@ -1578,7 +1624,7 @@ LaunchTerminalProcess()
             try IniWrite("false", g_ConfigFile, "General", "FirstRun")
     }
 
-    Run("alacritty.exe")
+    Run("alacritty.exe", startDir)
 }
 
 ; Helper: Spawns the initial terminal window on target monitor (handling welcome banner if configured)
