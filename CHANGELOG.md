@@ -7,6 +7,44 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.12.0] - 2026-10-24
+
+## Features
+### Major
+- **Idempotent Upgrade Path (`install.ps1`)**: Re-running the installer is now an explicit, safe upgrade instead of a blind reinstall. The script reads a canonical `VERSION`/`CONFIG_SCHEMA`, detects existing installs through `%APPDATA%\alacritty\.install-state.json` (falling back to the deployed script for legacy installs), reports "Existing install found (vX) -> upgrading to vY", and warns before installing an older version over a newer one.
+- **Config Preservation by Default (`config.ini`, `alacritty.toml`)**: Existing user configuration is no longer clobbered. `config.ini` is merged by appending only missing sections/keys (comments, ordering and user edits untouched), `alacritty.toml` is only patched when a shell is explicitly supplied, and every modification is preceded by a timestamped `.bak` backup. `-ResetConfig` performs a deliberate factory reset.
+- **Graceful Teardown & Uninstaller Parity**: Process detection now uses `Get-CimInstance Win32_Process` (the `Get-Process ... CommandLine` check never worked in Windows PowerShell 5.1) and validates the parsed script path against the deployed and repository copies. Running instances receive `WM_CLOSE` first so AHK `OnExit` cleanup can destroy seam overlays, with a force-kill fallback after a grace period. Both `install.ps1` and `uninstall.ps1` share the same logic through the new `quake_common.ps1`.
+- **Windows "Installed Apps" Registration**: Deployments write a per-user Add/Remove Programs entry (`HKCU\...\Uninstall\QuakeAlacritty`) with `DisplayVersion`, `InstallLocation`, `EstimatedSize`, `UninstallString`/`QuietUninstallString`, and `NoModify`/`NoRepair`. The entry is refreshed on every upgrade, skipped for symlink/portable deployments, and deleted unconditionally by the uninstaller.
+
+### Minor
+- **`-UpgradeDependencies`**: Opt-in dependency upgrades. Reports installed Alacritty, AutoHotkey v2 and Nerd Font versions alongside winget-reported availability, then runs `winget upgrade` per package. Plain installs remain install-only.
+- **`-CheckForUpdates` / `-PassThru`**: Advisory update check against the raw `VERSION` on the default branch with a 3-second timeout, semver validation, TLS 1.2 and no-cache headers. It never downloads or executes anything and can run standalone (with `-PassThru` for CI consumers).
+- **`-DryRun`**: Lists every planned file write, backup, shortcut, registry key, profile edit, package upgrade and process action without applying it (explicitly not `ShouldProcess`/`-WhatIf` semantics).
+- **`-VerifyVersion`**: Fails with a clear message when `VERSION`, the newest `CHANGELOG.md` heading and (when tags exist) the nearest git tag disagree.
+
+## Fixes
+### Major
+_None_
+### Minor
+- **Headless "keep" Configuration**: `keep` is now accepted by the `-Shell` `ValidateSet`, so scripted/CI upgrades can preserve configuration. Previously only the interactive menu could select it.
+- **Silent `ToggleVisor` Rewrite**: The toggle hotkey is only rewritten when `-KeyboardLayout` is explicitly supplied (or chosen interactively); preserving configuration no longer silently resets a user-rebound hotkey to `#sc029`.
+- **Uninstaller Artifact Leak**: `uninstall.ps1` now deletes `.install-state.json`, `VERSION`, `CONFIG_SCHEMA`, `quake_common.ps1`, timestamped `.bak` files (when removing configs) and the HKCU uninstall key, instead of relying on the folder being empty and leaking the directory, metadata and a stale "Installed Apps" entry.
+
+## Window Management & Multi-Monitor
+_None_
+
+## Styling & Appearance
+_None_
+
+## Configuration & Tooling
+- Added repository `VERSION` (`0.12.0`) and `CONFIG_SCHEMA` (`1`) as the single source of truth for release and configuration-schema identity.
+- Added `quake_common.ps1` (shared version, install-state, process-detection, teardown and INI-merge helpers) and deployed it alongside the other application files.
+- `quake_alacritty.ahk` now reads `A_ScriptDir\VERSION` at startup for the tray tooltip and "Quake Alacritty vX" tray menu label, registers `OnExit` cleanup to remove orphan seam overlays, and handles `WM_CLOSE` by exiting through `OnExit`.
+- `welcome.ps1` shows the deployed version in the `quake-help` cheat sheet title.
+- Documented upgrades, `-DryRun`, `-ResetConfig`, dependency upgrades, update checks, version verification and the new metadata files in `README.md`.
+
+---
+
 ## [0.11.3] - 2026-10-23
 
 ## Features

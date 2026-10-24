@@ -148,7 +148,13 @@ function global:Show-QuakeCheatsheet {
     Write-Host ($cBorder + $chTopLeft + ($chHoriz * ($boxWidth - 2)) + $chTopRight + $cReset)
     
     # Title row
+    $appVersion = ""
+    $versionPath = Join-Path $PSScriptRoot "VERSION"
+    if (Test-Path $versionPath) {
+        try { $appVersion = (Get-Content -Path $versionPath -Raw -ErrorAction Stop).Trim() } catch { }
+    }
     $titleLeft  = "  " + $chBolt + " Quake Alacritty"
+    if ($appVersion) { $titleLeft += " v" + $appVersion }
     $titleRight = "Quickstart Cheat Sheet  "
     $pad = $boxWidth - 2 - $titleLeft.Length - $titleRight.Length - 3
     if ($pad -lt 1) { $pad = 1 }
