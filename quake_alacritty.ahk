@@ -1844,9 +1844,13 @@ SpawnSplit()
         TileAlacritty(targetMon)
 
         if (newHwnd && WinExist("ahk_id " newHwnd))
+        {
             try WinActivate("ahk_id " newHwnd)
+        }
         else if (g_MonitorWindows[targetMon].Length > oldCount && WinExist("ahk_id " g_MonitorWindows[targetMon][g_MonitorWindows[targetMon].Length]))
+        {
             try WinActivate("ahk_id " g_MonitorWindows[targetMon][g_MonitorWindows[targetMon].Length])
+        }
     }
     else
     {
@@ -1889,9 +1893,13 @@ SpawnSplit()
         TileAlacritty(targetMon)
 
         if (newHwnd && WinExist("ahk_id " newHwnd))
+        {
             try WinActivate("ahk_id " newHwnd)
+        }
         else if (g_AlacrittyOrder.Length > oldCount && WinExist("ahk_id " g_AlacrittyOrder[g_AlacrittyOrder.Length]))
+        {
             try WinActivate("ahk_id " g_AlacrittyOrder[g_AlacrittyOrder.Length])
+        }
     }
 }
 
