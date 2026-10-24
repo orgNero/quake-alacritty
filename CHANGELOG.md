@@ -21,6 +21,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - **`-CheckForUpdates` / `-PassThru`**: Advisory update check against the raw `VERSION` on the default branch with a 3-second timeout, semver validation, TLS 1.2 and no-cache headers. It never downloads or executes anything and can run standalone (with `-PassThru` for CI consumers).
 - **`-DryRun`**: Lists every planned file write, backup, shortcut, registry key, profile edit, package upgrade and process action without applying it (explicitly not `ShouldProcess`/`-WhatIf` semantics).
 - **`-VerifyVersion`**: Fails with a clear message when `VERSION`, the newest `CHANGELOG.md` heading and (when tags exist) the nearest git tag disagree.
+- **Configurable Starting Directory (`StartingDirectory=~`)**: Terminal windows previously inherited the AutoHotkey script's working directory (`%APPDATA%\alacritty`). Now defaults to the user home directory (`%USERPROFILE%` / `~`) across all shells (PowerShell, WSL, Git Bash) and is fully customizable in `config.ini` (`StartingDirectory` supports `~`, environment variables like `%USERPROFILE%\repos`, or absolute paths with safe fallback).
 
 ## Fixes
 ### Major
