@@ -115,8 +115,31 @@ The setup wizard guides you through:
 3. **Keyboard Layout**: Select **Nordic / Swedish (`Win + §`)** or **US / Standard ANSI (`` `Win + ` `` / `Win + ~`)**.
 4. **Startup Integration**: Configures automatic startup with Windows.
 
+#### Upgrading an Existing Install
+
+Re-running `install.ps1` is a safe upgrade, not a reinstall. The script reads `%APPDATA%\alacritty\.install-state.json` (falling back to the deployed script for older installs) and reports `Existing install found (v0.11.3) -> upgrading to v0.12.0`.
+
+- **Configuration is preserved by default.** `config.ini` is merged by appending only missing sections/keys; existing lines, ordering, comments and custom values are never rewritten. `alacritty.toml` is only patched when you explicitly choose a shell. Every modification is preceded by a timestamped `.bak` backup.
+- **Running instances are stopped gracefully.** `install.ps1` and `uninstall.ps1` detect AutoHotkey processes through `Win32_Process.CommandLine`, validate the script path, send `WM_CLOSE` so `OnExit` can destroy seam overlays, and only force-kill after a grace period.
+- **Windows "Installed Apps" is updated.** A per-user `HKCU` uninstall entry (version, install location, size, uninstall command) is refreshed on every upgrade and removed by the uninstaller.
+
+| Flag | What it does |
+| --- | --- |
+| `-ResetConfig` | Deliberately restore factory `config.ini` / `alacritty.toml` (timestamped backups first) |
+| `-Shell keep` | Keep the existing `[terminal.shell]` block in headless/CI runs |
+| `-KeyboardLayout nordic\|us` | Rebind `ToggleVisor`; omit it to keep your current binding |
+| `-UpgradeDependencies` | Print installed vs. winget-available versions, then run `winget upgrade` |
+| `-CheckForUpdates` | Advisory check against the `VERSION` marker on `main` (never downloads or installs) |
+| `-DryRun` | Print every planned file write, backup, shortcut, registry key and process action without applying it |
+| `-VerifyVersion` | Fail when `VERSION`, the newest `CHANGELOG.md` heading and git tags disagree |
+| `-NonInteractive` | Never prompt; use defaults for anything not supplied |
+| `-PassThru` | With `-CheckForUpdates`, return a result object instead of relying on text output |
+
+> [!NOTE]
+> Re-running without `-Shell` or `-KeyboardLayout` no longer changes an existing shell block or rewrites a user-rebound `ToggleVisor` hotkey.
+
 ### Option B: Manual Setup
-1. Copy `alacritty.toml`, `quake_alacritty.ahk`, `config.ini`, `welcome.ps1`, and `uninstall.ps1` to your configuration folder:
+1. Copy `alacritty.toml`, `quake_alacritty.ahk`, `config.ini`, `welcome.ps1`, `quake_common.ps1`, `uninstall.ps1`, `VERSION`, and `CONFIG_SCHEMA` to your configuration folder:
    ```
    C:\Users\<YourUsername>\AppData\Roaming\alacritty\
    ```
@@ -250,10 +273,21 @@ powershell -ExecutionPolicy Bypass -File "$env:APPDATA\alacritty\uninstall.ps1"
 ```
 
 The uninstaller:
-- Terminates running Quake Alacritty background processes.
+- Requests a graceful shutdown of running Quake Alacritty instances (force-kill only as a fallback) so seam overlays are cleaned up.
 - Removes the Windows Startup shortcut.
+- Removes the per-user "Installed Apps" registry entry (`HKCU\Software\Microsoft\Windows\CurrentVersion\Uninstall\QuakeAlacritty`).
 - Cleans up the `quake-help` and `quake-env` commands from your PowerShell `$PROFILE`.
-- Removes deployed application files while giving you the option to keep or delete your custom configuration files (`config.ini` and `alacritty.toml`).
+- Removes deployed application files and installer artifacts (`.install-state.json`, `VERSION`, `CONFIG_SCHEMA`, `quake_common.ps1`) while giving you the option to keep or delete your custom configuration files (`config.ini` and `alacritty.toml`). Choosing to delete the configuration also removes the timestamped `.bak` backups and the now-empty install folder.
+
+---
+
+## 🔖 Version Metadata
+
+- **`VERSION`** — one-line semantic version of the app (currently `0.12.0`), deployed to `%APPDATA%\alacritty\VERSION`.
+- **`CONFIG_SCHEMA`** — one-line integer that is bumped when `config.ini` keys are renamed or removed.
+- **`%APPDATA%\alacritty\.install-state.json`** — machine state written on every deploy (`version`, `configSchema`, `gitCommit`, `installedAt`, `updatedAt`, `shell`, `layout`, `targetDir`). It is informational only; `VERSION`/`CONFIG_SCHEMA` remain the source of truth.
+- The AutoHotkey tray tooltip/menu and the `quake-help` cheat sheet read `VERSION` at runtime instead of embedding constants.
+- Run `.\install.ps1 -VerifyVersion` to assert that `VERSION` and the newest `CHANGELOG.md` heading agree (and the nearest git tag, once tags exist).
 
 ---
 

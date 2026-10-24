@@ -15,7 +15,10 @@ Key capabilities:
 ## 2. Key Architecture & File Structure
 - `quake_alacritty.ahk`: Core AutoHotkey v2 script managing hotkeys (`Win + §`, `Alt + Enter`, `Alt + W`, `Alt + R`, `Alt + Arrows`), monitor resolution and mouse cursor detection, window positioning/tiling, and transparent cyan seam overlay GUIs.
 - `alacritty.toml`: Alacritty terminal styling, font definitions (JetBrainsMono Nerd Font), window opacity (`0.70`), and Windows 11 acrylic blur settings.
-- `install.ps1`: Automated installation script handling winget dependency checks, AppData roaming deployments, symbolic links, and startup shortcut registration.
+- `install.ps1`: Idempotent installer/upgrader (install-state detection, config merge/backup policy, dependency install/upgrade, ARP registration, `-DryRun`, `-CheckForUpdates`, `-VerifyVersion`).
+- `uninstall.ps1`: Dedicated uninstaller (graceful teardown, startup shortcut, profile hooks, HKCU uninstall entry, install metadata cleanup).
+- `quake_common.ps1`: Shared installer helpers dot-sourced by both PowerShell scripts (version/install-state, `Win32_Process` detection, `WM_CLOSE` teardown, INI merge).
+- `VERSION` / `CONFIG_SCHEMA`: One-line source of truth for the app version and `config.ini` schema; deployed to `%APPDATA%\alacritty` and read by AutoHotkey at runtime.
 - `README.md`: Public user documentation, feature showcase, shortcut cheatsheet, and quick start guide.
 
 ---
