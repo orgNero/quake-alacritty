@@ -901,12 +901,6 @@ if (Test-Path $destIni) {
     $iniContent = [System.IO.File]::ReadAllText($destIni)
     $updatedIni = $iniContent
 
-    if ($shellWasChosen -and ($selectedShell -in @("wsl", "gitbash"))) {
-        if ($updatedIni -match 'ShowHelpOnStart=\w+') {
-            $updatedIni = $updatedIni -replace 'ShowHelpOnStart=\w+', 'ShowHelpOnStart=none'
-        }
-    }
-
     # Note: In AutoHotkey, scan code sc029 is the key directly below Esc on both Swedish (§) and US (`).
     if ($layoutWasChosen) {
         $toggleValue = if ($selectedLayout -eq "us") {
@@ -979,15 +973,15 @@ if ($selectedShell -eq "gitbash" -or (Test-Path $bashrcPath)) {
         $bashrcContent = if (Test-Path $bashrcPath) { Get-Content $bashrcPath -Raw -ErrorAction SilentlyContinue } else { "" }
         if ($bashrcContent -notmatch 'quake-help') {
             if (Test-ShouldApply "Register 'quake-help' and 'quake-env' in $bashrcPath") {
-                $bashBlock = "`n# Quake Alacritty Cheat Sheet & Environment Helper`nquake-help() { powershell.exe -NoLogo -ExecutionPolicy Bypass -File `"`$APPDATA/alacritty/welcome.ps1`" `"`$@`"; }`nquake-env() { powershell.exe -NoLogo -ExecutionPolicy Bypass -File `"`$APPDATA/alacritty/welcome.ps1`" -EnvInfo; }"
+                $bashBlock = "`n# Quake Alacritty Cheat Sheet & Environment Helper`nquake-help() { powershell.exe -NoLogo -ExecutionPolicy Bypass -File `"`$APPDATA/alacritty/welcome.ps1`" `"`$@`"; }`nquake-env() { powershell.exe -NoLogo -ExecutionPolicy Bypass -File `"`$APPDATA/alacritty/welcome.ps1`" -EnvInfo; }`nif [ -n `"`$QUAKE_SHOW_HELP`" ] && [ `"`$QUAKE_SHOW_HELP`" != `"none`" ]; then`n    if [ `"`$QUAKE_SHOW_HELP`" = `"banner`" ]; then`n        quake-help`n    else`n        printf '%b\n' `"\n  \033[38;2;251;191;36m💡 \033[38;2;148;163;184mTip: Type '\033[1;38;2;56;189;248mquake-help\033[0;38;2;148;163;184m' to view keyboard shortcuts.\033[0m\n`"`n    fi`nfi"
                 Add-Content -Path $bashrcPath -Value $bashBlock
                 Write-Host "  [Profile] Registered 'quake-help' and 'quake-env' in $bashrcPath" -ForegroundColor Green
             }
-        } elseif ($bashrcContent -notmatch 'quake-env') {
-            if (Test-ShouldApply "Register 'quake-env' in $bashrcPath") {
-                $bashEnvBlock = "`nquake-env() { powershell.exe -NoLogo -ExecutionPolicy Bypass -File `"`$APPDATA/alacritty/welcome.ps1`" -EnvInfo; }"
-                Add-Content -Path $bashrcPath -Value $bashEnvBlock
-                Write-Host "  [Profile] Registered 'quake-env' in $bashrcPath" -ForegroundColor Green
+        } elseif ($bashrcContent -notmatch 'QUAKE_SHOW_HELP') {
+            if (Test-ShouldApply "Register QUAKE_SHOW_HELP hint in $bashrcPath") {
+                $bashTipBlock = "`nif [ -n `"`$QUAKE_SHOW_HELP`" ] && [ `"`$QUAKE_SHOW_HELP`" != `"none`" ]; then`n    if [ `"`$QUAKE_SHOW_HELP`" = `"banner`" ]; then`n        quake-help`n    else`n        printf '%b\n' `"\n  \033[38;2;251;191;36m💡 \033[38;2;148;163;184mTip: Type '\033[1;38;2;56;189;248mquake-help\033[0;38;2;148;163;184m' to view keyboard shortcuts.\033[0m\n`"`n    fi`nfi"
+                Add-Content -Path $bashrcPath -Value $bashTipBlock
+                Write-Host "  [Profile] Registered startup hint in $bashrcPath" -ForegroundColor Green
             }
         }
     } catch { }
