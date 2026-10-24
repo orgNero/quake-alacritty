@@ -950,12 +950,14 @@ if ($shouldCreateStartup) {
 }
 
 # -----------------------------------------------------------------------------
-# Step 8: Optional PowerShell Profile Registration
+# Step 8: Shell Profile Registration (PowerShell & Git Bash)
 # -----------------------------------------------------------------------------
-if (($selectedShell -in @("powershell", "pwsh")) -and (Test-Path $PROFILE)) {
+$welcomePath = Join-Path $TargetDir "welcome.ps1"
+
+# 8a: PowerShell profile registration
+if (Test-Path $PROFILE) {
     try {
         $profileContent = Get-Content $PROFILE -Raw -ErrorAction SilentlyContinue
-        $welcomePath = Join-Path $TargetDir "welcome.ps1"
         if ($profileContent -notmatch 'quake-help') {
             if (Test-ShouldApply "Register 'quake-help' and 'quake-env' in $PROFILE") {
                 Add-Content -Path $PROFILE -Value "`n# Quake Alacritty Cheat Sheet & Environment Helper`nfunction quake-help { & `"$welcomePath`" }`nfunction quake-env { & `"$welcomePath`" -EnvInfo }"
@@ -965,6 +967,27 @@ if (($selectedShell -in @("powershell", "pwsh")) -and (Test-Path $PROFILE)) {
             if (Test-ShouldApply "Register 'quake-env' in $PROFILE") {
                 Add-Content -Path $PROFILE -Value "`nfunction quake-env { & `"$welcomePath`" -EnvInfo }"
                 Write-Host "  [Profile] Registered 'quake-env' in `$PROFILE" -ForegroundColor Green
+            }
+        }
+    } catch { }
+}
+
+# 8b: Git Bash profile registration (~/.bashrc)
+$bashrcPath = Join-Path $env:USERPROFILE ".bashrc"
+if ($selectedShell -eq "gitbash" -or (Test-Path $bashrcPath)) {
+    try {
+        $bashrcContent = if (Test-Path $bashrcPath) { Get-Content $bashrcPath -Raw -ErrorAction SilentlyContinue } else { "" }
+        if ($bashrcContent -notmatch 'quake-help') {
+            if (Test-ShouldApply "Register 'quake-help' and 'quake-env' in $bashrcPath") {
+                $bashBlock = "`n# Quake Alacritty Cheat Sheet & Environment Helper`nquake-help() { powershell.exe -NoLogo -ExecutionPolicy Bypass -File `"`$APPDATA/alacritty/welcome.ps1`" `"`$@`"; }`nquake-env() { powershell.exe -NoLogo -ExecutionPolicy Bypass -File `"`$APPDATA/alacritty/welcome.ps1`" -EnvInfo; }"
+                Add-Content -Path $bashrcPath -Value $bashBlock
+                Write-Host "  [Profile] Registered 'quake-help' and 'quake-env' in $bashrcPath" -ForegroundColor Green
+            }
+        } elseif ($bashrcContent -notmatch 'quake-env') {
+            if (Test-ShouldApply "Register 'quake-env' in $bashrcPath") {
+                $bashEnvBlock = "`nquake-env() { powershell.exe -NoLogo -ExecutionPolicy Bypass -File `"`$APPDATA/alacritty/welcome.ps1`" -EnvInfo; }"
+                Add-Content -Path $bashrcPath -Value $bashEnvBlock
+                Write-Host "  [Profile] Registered 'quake-env' in $bashrcPath" -ForegroundColor Green
             }
         }
     } catch { }

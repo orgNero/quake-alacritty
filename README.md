@@ -278,7 +278,7 @@ The uninstaller:
 - Requests a graceful shutdown of running Quake Alacritty instances (force-kill only as a fallback) so seam overlays are cleaned up.
 - Removes the Windows Startup shortcut.
 - Removes the per-user "Installed Apps" registry entry (`HKCU\Software\Microsoft\Windows\CurrentVersion\Uninstall\QuakeAlacritty`).
-- Cleans up the `quake-help` and `quake-env` commands from your PowerShell `$PROFILE`.
+- Cleans up the `quake-help` and `quake-env` commands from your PowerShell `$PROFILE` and Git Bash `~/.bashrc`.
 - Removes deployed application files and installer artifacts (`.install-state.json`, `VERSION`, `CONFIG_SCHEMA`, `quake_common.ps1`) while giving you the option to keep or delete your custom configuration files (`config.ini` and `alacritty.toml`). Choosing to delete the configuration also removes the timestamped `.bak` backups and the now-empty install folder.
 
 ---
