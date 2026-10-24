@@ -1,4 +1,4 @@
-﻿#Requires AutoHotkey v2.0
+#Requires AutoHotkey v2.0
 #SingleInstance Force
 Persistent true
 DetectHiddenWindows true
@@ -702,8 +702,10 @@ TileAlacritty(targetMon := 0, syncWindows := true)
     ; 1. Show all windows and set on top
     for hwnd in windows
     {
-        WinShow("ahk_id " hwnd)
-        WinSetAlwaysOnTop(1, "ahk_id " hwnd)
+        try {
+            WinShow("ahk_id " hwnd)
+            WinSetAlwaysOnTop(1, "ahk_id " hwnd)
+        }
     }
 
     ; 2. Work area dimensions (avoids taskbar)
@@ -721,18 +723,18 @@ TileAlacritty(targetMon := 0, syncWindows := true)
         if (curSinglePaneSide == "left")
         {
             thisW := Floor((totalWidth - gap) / 2)
-            WinMove(wLeft, wTop, thisW, totalHeight, "ahk_id " hwnd)
+            try WinMove(wLeft, wTop, thisW, totalHeight, "ahk_id " hwnd)
         }
         else if (curSinglePaneSide == "right")
         {
             thisW := Floor((totalWidth - gap) / 2)
             currentX := wLeft + totalWidth - thisW
-            WinMove(currentX, wTop, thisW, totalHeight, "ahk_id " hwnd)
+            try WinMove(currentX, wTop, thisW, totalHeight, "ahk_id " hwnd)
         }
         else
         {
             topHeight := Floor(totalHeight * g_VisorHeightPercent)
-            WinMove(wLeft, wTop, totalWidth, topHeight, "ahk_id " hwnd)
+            try WinMove(wLeft, wTop, totalWidth, topHeight, "ahk_id " hwnd)
         }
         return
     }
@@ -748,10 +750,10 @@ TileAlacritty(targetMon := 0, syncWindows := true)
             h1 := Floor(availHeight / 2)
             h2 := availHeight - h1
 
-            WinMove(wLeft, wTop, totalWidth, h1, "ahk_id " windows[1])
+            try WinMove(wLeft, wTop, totalWidth, h1, "ahk_id " windows[1])
             if (gap > 0)
                 CreateDivider(targetMon, wLeft, wTop + h1, totalWidth, gap, g_BorderColor)
-            WinMove(wLeft, wTop + h1 + gap, totalWidth, h2, "ahk_id " windows[2])
+            try WinMove(wLeft, wTop + h1 + gap, totalWidth, h2, "ahk_id " windows[2])
         }
         else if (curTwoPaneLayout == "left-stacked")
         {
@@ -760,10 +762,10 @@ TileAlacritty(targetMon := 0, syncWindows := true)
             h1 := Floor(availHeight / 2)
             h2 := availHeight - h1
 
-            WinMove(wLeft, wTop, colW, h1, "ahk_id " windows[1])
+            try WinMove(wLeft, wTop, colW, h1, "ahk_id " windows[1])
             if (gap > 0)
                 CreateDivider(targetMon, wLeft, wTop + h1, colW, gap, g_BorderColor)
-            WinMove(wLeft, wTop + h1 + gap, colW, h2, "ahk_id " windows[2])
+            try WinMove(wLeft, wTop + h1 + gap, colW, h2, "ahk_id " windows[2])
         }
         else if (curTwoPaneLayout == "right-stacked")
         {
@@ -773,10 +775,10 @@ TileAlacritty(targetMon := 0, syncWindows := true)
             h1 := Floor(availHeight / 2)
             h2 := availHeight - h1
 
-            WinMove(leftX, wTop, colW, h1, "ahk_id " windows[1])
+            try WinMove(leftX, wTop, colW, h1, "ahk_id " windows[1])
             if (gap > 0)
                 CreateDivider(targetMon, leftX, wTop + h1, colW, gap, g_BorderColor)
-            WinMove(leftX, wTop + h1 + gap, colW, h2, "ahk_id " windows[2])
+            try WinMove(leftX, wTop + h1 + gap, colW, h2, "ahk_id " windows[2])
         }
         else ; "side-by-side-visor" or "side-by-side-full"
         {
@@ -785,10 +787,10 @@ TileAlacritty(targetMon := 0, syncWindows := true)
             col1W := Floor(availWidth / 2)
             col2W := availWidth - col1W
 
-            WinMove(wLeft, wTop, col1W, paneHeight, "ahk_id " windows[1])
+            try WinMove(wLeft, wTop, col1W, paneHeight, "ahk_id " windows[1])
             if (gap > 0)
                 CreateDivider(targetMon, wLeft + col1W, wTop, gap, paneHeight, g_BorderColor)
-            WinMove(wLeft + col1W + gap, wTop, col2W, paneHeight, "ahk_id " windows[2])
+            try WinMove(wLeft + col1W + gap, wTop, col2W, paneHeight, "ahk_id " windows[2])
         }
         return
     }
@@ -811,21 +813,21 @@ TileAlacritty(targetMon := 0, syncWindows := true)
             bot2W       := availWidth - bot1W
 
             ; Window 1: Top Master
-            WinMove(wLeft, wTop, totalWidth, topHeight, "ahk_id " windows[1])
+            try WinMove(wLeft, wTop, totalWidth, topHeight, "ahk_id " windows[1])
 
             ; Full-width horizontal divider
             if (gap > 0)
                 CreateDivider(targetMon, wLeft, wTop + topHeight, totalWidth, gap, g_BorderColor)
 
             ; Window 2: Bottom-Left
-            WinMove(wLeft, botY, bot1W, botHeight, "ahk_id " windows[2])
+            try WinMove(wLeft, botY, bot1W, botHeight, "ahk_id " windows[2])
 
             ; Bottom vertical divider
             if (gap > 0)
                 CreateDivider(targetMon, wLeft + bot1W, botY, gap, botHeight, g_BorderColor)
 
             ; Window 3: Bottom-Right
-            WinMove(wLeft + bot1W + gap, botY, bot2W, botHeight, "ahk_id " windows[3])
+            try WinMove(wLeft + bot1W + gap, botY, bot2W, botHeight, "ahk_id " windows[3])
         }
         else if (curTileLayout == "left")
         {
@@ -840,21 +842,21 @@ TileAlacritty(targetMon := 0, syncWindows := true)
             h2          := availHeight - h1
 
             ; Window 1: Left Master (100% height)
-            WinMove(wLeft, wTop, masterWidth, totalHeight, "ahk_id " windows[1])
+            try WinMove(wLeft, wTop, masterWidth, totalHeight, "ahk_id " windows[1])
 
             ; Full-height vertical divider
             if (gap > 0)
                 CreateDivider(targetMon, wLeft + masterWidth, wTop, gap, totalHeight, g_BorderColor)
 
             ; Window 2: Top-Right
-            WinMove(rightX, wTop, rightWidth, h1, "ahk_id " windows[2])
+            try WinMove(rightX, wTop, rightWidth, h1, "ahk_id " windows[2])
 
             ; Horizontal divider in right column
             if (gap > 0)
                 CreateDivider(targetMon, rightX, wTop + h1, rightWidth, gap, g_BorderColor)
 
             ; Window 3: Bottom-Right
-            WinMove(rightX, wTop + h1 + gap, rightWidth, h2, "ahk_id " windows[3])
+            try WinMove(rightX, wTop + h1 + gap, rightWidth, h2, "ahk_id " windows[3])
         }
         else if (curTileLayout == "right")
         {
@@ -870,21 +872,21 @@ TileAlacritty(targetMon := 0, syncWindows := true)
             h2          := availHeight - h1
 
             ; Window 1: Top-Left
-            WinMove(wLeft, wTop, leftWidth, h1, "ahk_id " windows[1])
+            try WinMove(wLeft, wTop, leftWidth, h1, "ahk_id " windows[1])
 
             ; Horizontal divider in left column
             if (gap > 0)
                 CreateDivider(targetMon, wLeft, wTop + h1, leftWidth, gap, g_BorderColor)
 
             ; Window 3: Bottom-Left
-            WinMove(wLeft, wTop + h1 + gap, leftWidth, h2, "ahk_id " windows[3])
+            try WinMove(wLeft, wTop + h1 + gap, leftWidth, h2, "ahk_id " windows[3])
 
             ; Full-height vertical divider
             if (gap > 0)
                 CreateDivider(targetMon, wLeft + leftWidth, wTop, gap, totalHeight, g_BorderColor)
 
             ; Window 2: Right Master (100% height)
-            WinMove(rightX, wTop, masterWidth, totalHeight, "ahk_id " windows[2])
+            try WinMove(rightX, wTop, masterWidth, totalHeight, "ahk_id " windows[2])
         }
         else ; "bottom" (default)
         {
@@ -899,21 +901,21 @@ TileAlacritty(targetMon := 0, syncWindows := true)
             top2W       := availWidth - top1W
 
             ; Window 1: Top-Left
-            WinMove(wLeft, wTop, top1W, topHeight, "ahk_id " windows[1])
+            try WinMove(wLeft, wTop, top1W, topHeight, "ahk_id " windows[1])
 
             ; Top vertical divider
             if (gap > 0)
                 CreateDivider(targetMon, wLeft + top1W, wTop, gap, topHeight, g_BorderColor)
 
             ; Window 2: Top-Right
-            WinMove(wLeft + top1W + gap, wTop, top2W, topHeight, "ahk_id " windows[2])
+            try WinMove(wLeft + top1W + gap, wTop, top2W, topHeight, "ahk_id " windows[2])
 
             ; Full-width horizontal divider
             if (gap > 0)
                 CreateDivider(targetMon, wLeft, wTop + topHeight, totalWidth, gap, g_BorderColor)
 
             ; Window 3: Bottom Master (100% width)
-            WinMove(wLeft, botY, totalWidth, botHeight, "ahk_id " windows[3])
+            try WinMove(wLeft, botY, totalWidth, botHeight, "ahk_id " windows[3])
         }
         return
     }
@@ -937,7 +939,7 @@ TileAlacritty(targetMon := 0, syncWindows := true)
         idx := A_Index
         hwnd := windows[idx]
         thisW := (idx == topCount) ? (wLeft + totalWidth - currentX) : baseTopColWidth
-        WinMove(currentX, wTop, thisW, topHeight, "ahk_id " hwnd)
+        try WinMove(currentX, wTop, thisW, topHeight, "ahk_id " hwnd)
         currentX += thisW
 
         if (idx < topCount && gap > 0)
@@ -961,7 +963,7 @@ TileAlacritty(targetMon := 0, syncWindows := true)
             idx := A_Index
             hwnd := windows[topCount + idx]
             thisW := (idx == botCount) ? (wLeft + totalWidth - currentX) : baseBotColWidth
-            WinMove(currentX, botY, thisW, botHeight, "ahk_id " hwnd)
+            try WinMove(currentX, botY, thisW, botHeight, "ahk_id " hwnd)
             currentX += thisW
 
             if (idx < botCount && gap > 0)
@@ -1616,17 +1618,22 @@ LaunchNewTerminal(targetMon)
         }
     }
 
-    if (g_MultiMonitorMode == "isolated" && firstHwnd)
+    if (g_MultiMonitorMode == "isolated" && firstHwnd && WinExist("ahk_id " firstHwnd))
     {
         if (!g_MonitorWindows.Has(targetMon))
             g_MonitorWindows[targetMon] := []
         g_MonitorWindows[targetMon].Push(firstHwnd)
     }
 
-    TileAlacritty(targetMon)
-
     if (firstHwnd && WinExist("ahk_id " firstHwnd))
-        WinActivate("ahk_id " firstHwnd)
+    {
+        TileAlacritty(targetMon)
+        try WinActivate("ahk_id " firstHwnd)
+    }
+    else
+    {
+        TileAlacritty(targetMon)
+    }
 }
 
 ; Toggles the terminal visor on the display containing the mouse cursor
@@ -1669,7 +1676,7 @@ ToggleVisor()
         {
             ; Hide all terminals on this display
             for hwnd in monWindows
-                WinHide("ahk_id " hwnd)
+                try WinHide("ahk_id " hwnd)
             ClearDividers(targetMon)
         }
         else
@@ -1677,7 +1684,7 @@ ToggleVisor()
             ; Show and tile terminals on this display
             TileAlacritty(targetMon)
             if (monWindows.Length > 0 && WinExist("ahk_id " monWindows[1]))
-                WinActivate("ahk_id " monWindows[1])
+                try WinActivate("ahk_id " monWindows[1])
         }
         return
     }
@@ -1710,20 +1717,22 @@ ToggleVisor()
         if (currentMon != 0 && currentMon != targetMon)
         {
             TileAlacritty(targetMon)
-            WinActivate("ahk_id " windows[1])
+            if (windows.Length > 0 && WinExist("ahk_id " windows[1]))
+                try WinActivate("ahk_id " windows[1])
             return
         }
 
         ; If already showing on the mouse monitor -> hide all
         for hwnd in windows
-            WinHide("ahk_id " hwnd)
+            try WinHide("ahk_id " hwnd)
         ClearDividers(0)
     }
     else
     {
         ; If tucked away -> show, tile on mouse screen, and focus
         TileAlacritty(targetMon)
-        WinActivate("ahk_id " windows[1])
+        if (windows.Length > 0 && WinExist("ahk_id " windows[1]))
+            try WinActivate("ahk_id " windows[1])
     }
 }
 
@@ -1787,7 +1796,7 @@ SpawnSplit()
 
     if (g_MultiMonitorMode == "isolated")
     {
-        if (newHwnd)
+        if (newHwnd && WinExist("ahk_id " newHwnd))
             g_MonitorWindows[targetMon].Push(newHwnd)
 
         ; Handle dynamic transitions for target display
@@ -1835,9 +1844,9 @@ SpawnSplit()
         TileAlacritty(targetMon)
 
         if (newHwnd && WinExist("ahk_id " newHwnd))
-            WinActivate("ahk_id " newHwnd)
-        else if (g_MonitorWindows[targetMon].Length > oldCount)
-            WinActivate("ahk_id " g_MonitorWindows[targetMon][g_MonitorWindows[targetMon].Length])
+            try WinActivate("ahk_id " newHwnd)
+        else if (g_MonitorWindows[targetMon].Length > oldCount && WinExist("ahk_id " g_MonitorWindows[targetMon][g_MonitorWindows[targetMon].Length]))
+            try WinActivate("ahk_id " g_MonitorWindows[targetMon][g_MonitorWindows[targetMon].Length])
     }
     else
     {
@@ -1880,9 +1889,9 @@ SpawnSplit()
         TileAlacritty(targetMon)
 
         if (newHwnd && WinExist("ahk_id " newHwnd))
-            WinActivate("ahk_id " newHwnd)
-        else if (g_AlacrittyOrder.Length > oldCount)
-            WinActivate("ahk_id " g_AlacrittyOrder[g_AlacrittyOrder.Length])
+            try WinActivate("ahk_id " newHwnd)
+        else if (g_AlacrittyOrder.Length > oldCount && WinExist("ahk_id " g_AlacrittyOrder[g_AlacrittyOrder.Length]))
+            try WinActivate("ahk_id " g_AlacrittyOrder[g_AlacrittyOrder.Length])
     }
 }
 
@@ -1912,7 +1921,7 @@ CloseSplit()
             monWindows := g_MonitorWindows[targetMon]
             oldCount := monWindows.Length
 
-            WinClose("ahk_id " activeHwnd)
+            try WinClose("ahk_id " activeHwnd)
             ; Adaptive polling: re-tile immediately once window closes (up to 200ms max)
             Loop 20 {
                 Sleep 10
@@ -1955,7 +1964,8 @@ CloseSplit()
             if (g_MonitorWindows[targetMon].Length > 0)
             {
                 TileAlacritty(targetMon)
-                WinActivate("ahk_id " g_MonitorWindows[targetMon][g_MonitorWindows[targetMon].Length])
+                if (WinExist("ahk_id " g_MonitorWindows[targetMon][g_MonitorWindows[targetMon].Length]))
+                    try WinActivate("ahk_id " g_MonitorWindows[targetMon][g_MonitorWindows[targetMon].Length])
             }
             else
             {
@@ -1967,7 +1977,7 @@ CloseSplit()
             oldWindows := GetAlacrittyWindows()
             oldCount := oldWindows.Length
 
-            WinClose("ahk_id " activeHwnd)
+            try WinClose("ahk_id " activeHwnd)
             Loop 20 {
                 Sleep 10
                 if (!WinExist("ahk_id " activeHwnd))
@@ -1997,7 +2007,8 @@ CloseSplit()
             if (newWindows.Length > 0)
             {
                 TileAlacritty()
-                WinActivate("ahk_id " newWindows[newWindows.Length])
+                if (WinExist("ahk_id " newWindows[newWindows.Length]))
+                    try WinActivate("ahk_id " newWindows[newWindows.Length])
             }
             else
             {
