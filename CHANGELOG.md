@@ -7,6 +7,33 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.12.1] - 2026-10-25
+
+## Features
+### Major
+_None_
+### Minor
+_None_
+
+## Fixes
+### Major
+- **Visor Hide Focus Handoff (`Win + §`)**: Dismissing the visor now returns keyboard focus to the window that was active before it was summoned. The previous implementation hid every pane with `WinHide`, which maps to `ShowWindow(SW_HIDE)` and does not deactivate the window, so the invisible terminal could remain the foreground window and keep swallowing keystrokes. Added foreground tracking (`g_VisorReturnHwnd`), a pre-hide activation step, post-hide verification with a `SwitchToThisWindow` fallback, and a Z-order fallback when the remembered window was closed or minimized while the visor was open. Focus is only reclaimed when a pane being hidden owns it, so switching to another app with the visor open is never overridden.
+
+### Minor
+_None_
+
+## Window Management & Multi-Monitor
+- Isolated multi-monitor mode now returns focus to the remembered window even when it lives on another display; panes on other monitors are never used as a return target, and hiding a visor whose panes do not own focus leaves the focused window untouched.
+
+## Styling & Appearance
+_None_
+
+## Configuration & Tooling
+- Documented hidden-foreground behavior and the focus-handoff helpers in `docs/BUGS_AND_GOTCHAS.md` §8.
+- README shortcut reference and feature list now state that hiding the visor restores the previous window's focus.
+
+---
+
 ## [0.12.0] - 2026-10-24
 
 ## Features
