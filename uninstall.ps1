@@ -154,6 +154,7 @@ $artifactFiles = @(
     "CONFIG_SCHEMA",
     ".install-state.json",
     ".update-check.json",
+    ".update-notice",
     "uninstall.ps1"
 )
 foreach ($file in $artifactFiles) {
