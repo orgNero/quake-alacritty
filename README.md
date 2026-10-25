@@ -22,6 +22,7 @@ Features mouse-aware multi-monitor detection, dynamic 2×2 quad grid tiling, acr
   * **Hopping Mode (`MultiMonitorMode=hopping`):** Prefer a single floating visor? Switch mode to `hopping` in `config.ini` to let a single terminal pool travel between displays to follow your mouse.
   * **Display Topology Safety:** Automatically detects monitor disconnects and resolution shifts (`WM_DISPLAYCHANGE`), safely migrating any orphaned terminals to your primary display without losing session states.
   * **Cross-Monitor Visor Migration (`Alt + Ctrl + Left / Right`):** Seamlessly relocate or swap your active visor workspace between physical monitors without killing running sessions. Automatically handles spatial left-to-right monitor sorting, work area dimensions, and click-through cyan seam overlays across mixed-DPI displays.
+* **Focus-Aware Dismissal (`Win + §`):** Hiding the visor hands keyboard focus back to the window you were using before summoning it, so typing never stays bound to the now-hidden terminal.
 * **Smart Dynamic Multi-Pane Tiling (`Alt + Enter`, `Alt + L`):**
   * **1 Terminal:** Top visor (100% width, 40% height) or side half-screen column (50% width, 100% height).
   * **2 Terminals:** 5 flexible modes cycled live via `Alt + L`:
@@ -52,7 +53,7 @@ Features mouse-aware multi-monitor detection, dynamic 2×2 quad grid tiling, acr
 
 | Shortcut | Context | Description |
 | :--- | :--- | :--- |
-| **`Win + §`** | **Global** | Toggle terminal visor (shows / hides on monitor under mouse cursor) |
+| **`Win + §`** | **Global** | Toggle terminal visor (shows on the monitor under the mouse cursor; hiding returns focus to the previous window) |
 | **`Alt + Enter`** | Inside Alacritty | Spawn a new split (auto-tiles into 1 → 2 → 3 → 4 layout) |
 | **`Alt + W`** / **`Alt + F4`** | Inside Alacritty | Close focused split and smoothly rebalance remaining windows |
 | **`Alt + R`** | Inside Alacritty | Force re-tile / balance windows |
