@@ -757,6 +757,13 @@ if (-not $DryRun -and (Test-Path $updateCachePath)) {
     Write-Host "  [Cache] Cleared stale update-check cache" -ForegroundColor Green
 }
 
+# A stale notice marker would hide a notice for a version that is still pending.
+$updateNoticePath = Join-Path $TargetDir ".update-notice"
+if (-not $DryRun -and (Test-Path $updateNoticePath)) {
+    Remove-Item -Path $updateNoticePath -Force -ErrorAction SilentlyContinue
+    Write-Host "  [Cache] Cleared stale update notice marker" -ForegroundColor Green
+}
+
 # Config files are user-owned: copy only when absent, merge when present, replace on -ResetConfig.
 foreach ($file in @("alacritty.toml", "config.ini")) {
     $source = Join-Path $SourceDir $file
@@ -927,11 +934,55 @@ $bashBlock = @'
 quake-help() { powershell.exe -NoLogo -ExecutionPolicy Bypass -File "$APPDATA/alacritty/welcome.ps1" "$@"; }
 quake-env() { powershell.exe -NoLogo -ExecutionPolicy Bypass -File "$APPDATA/alacritty/welcome.ps1" -EnvInfo; }
 quake-update() { local a=(); for x in "$@"; do if [ "$x" = "--check" ]; then a+=("-Check"); else a+=("$x"); fi; done; powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File "$APPDATA/alacritty/update.ps1" "${a[@]}"; }
+quake_version_is_newer() {
+    local a=${1#v} b=${2#v}
+    a=${a%%[-+]*} b=${b%%[-+]*}
+    local IFS=.
+    local -a av=($a) bv=($b)
+    local i x y
+    for ((i = 0; i < 3; i++)); do
+        x=${av[i]:-0}
+        y=${bv[i]:-0}
+        [[ $x =~ ^[0-9]+$ && $y =~ ^[0-9]+$ ]] || return 1
+        x=$((10#$x))
+        y=$((10#$y))
+        ((x > y)) && return 0
+        ((x < y)) && return 1
+    done
+    return 1
+}
+quake_update_notice() {
+    [ -n "$APPDATA" ] || return 0
+    local dir="$APPDATA/alacritty" raw latest installed shown today
+    [ -f "$dir/.update-check.json" ] || return 0
+    raw=$(<"$dir/.update-check.json")
+    [[ $raw =~ \"latestVersion\"[[:space:]]*:[[:space:]]*\"([^\"]*)\" ]] && latest=${BASH_REMATCH[1]}
+    [[ $raw =~ \"installedVersion\"[[:space:]]*:[[:space:]]*\"([^\"]*)\" ]] && installed=${BASH_REMATCH[1]}
+    if [ -f "$dir/VERSION" ]; then
+        installed=$(<"$dir/VERSION")
+    fi
+    latest=${latest#v}
+    installed=${installed#v}
+    installed=${installed//[[:space:]]/}
+    [ -n "$latest" ] && [ -n "$installed" ] || return 0
+    [[ $latest =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || return 0
+    quake_version_is_newer "$latest" "$installed" || return 0
+
+    today=$(printf "%(%Y%m%d)T" -1)
+    if [ -f "$dir/.update-notice" ]; then
+        shown=$(<"$dir/.update-notice")
+        [ "${shown//[[:space:]]/}" = "$today" ] && return 0
+    fi
+
+    printf '%b\n' "  \033[38;2;251;191;36m⬆ \033[38;2;148;163;184mUpdate available: v$latest (you have v$installed). Type '\033[1;38;2;56;189;248mquake-update\033[0;38;2;148;163;184m'.\033[0m"
+    printf '%s\n' "$today" > "$dir/.update-notice" 2>/dev/null || true
+}
 if [ -n "$QUAKE_SHOW_HELP" ] && [ "$QUAKE_SHOW_HELP" != "none" ]; then
     if [ "$QUAKE_SHOW_HELP" = "banner" ]; then
-        quake-help
+        powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File "$APPDATA/alacritty/welcome.ps1" -Startup
     else
         printf '%b\n' "\n  \033[38;2;251;191;36m💡 \033[38;2;148;163;184mTip: Type '\033[1;38;2;56;189;248mquake-help\033[0;38;2;148;163;184m' to view keyboard shortcuts.\033[0m\n"
+        quake_update_notice
     fi
 fi
 # <<< Quake Alacritty <<<
