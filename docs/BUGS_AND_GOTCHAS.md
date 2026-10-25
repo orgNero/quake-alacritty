@@ -392,3 +392,25 @@ With symbolic links in place, `A_ScriptFullPath` resolves directly to the reposi
 - `update.ps1` launches the installer with the call operator (`& $powerShellExe -File $installer ...`) and reads `$LASTEXITCODE`. That waits for the direct child only, so the detached AHK process cannot block the updater.
 - All git calls go through `Invoke-QuakeGit`, which temporarily sets `$ErrorActionPreference = "Continue"`, redirects stderr to a temp file, restores the preference in `finally`, and returns `ExitCode`/`Lines`/`Text`. Every failure path then prints a plain-language sentence; theme detection and error extraction never see PowerShell's stderr decoration.
 - Prefer probing capabilities (`rev-parse --show-toplevel`) and checking `$LASTEXITCODE` over assuming a clean stderr stream from `git`.
+
+---
+
+## 19. Cached Update Notice: Stale `installedVersion`, Once-a-Day Marker and Prompt Latency
+
+### Symptom
+- After `quake-update`, every new terminal still prints `Update available` even though `VERSION` already reports the new version.
+- A handwritten notice prints on every pane instead of once per calendar day, or `quake-help` silently consumes the daily throttle.
+- A naive implementation adds tens of milliseconds to every terminal startup.
+
+### Root Cause
+- The cache's `installedVersion` is only refreshed by the next background check, so comparing `latestVersion` against the cache keeps advertising the version that was just replaced.
+- `Get-Command <name>` for a command that does **not** exist scans the whole command table (~25 ms per call), and dot-sourcing `quake_common.ps1` inside a function re-parses it on every invocation because the definitions land in that function's scope.
+- MSYS2/Git Bash `fork()` is expensive (~10-25 ms per external command). A prompt hook built from `cygpath` + `sed` + `head` + `tr` + `sort -V` forks 7+ processes and adds ~200 ms to **every** new shell, even when no notice is due.
+- Writing the `.update-notice` marker from the manual `quake-help` path would consume the once-a-day budget for a view the user requested explicitly. A failed marker write must not suppress the notice or throw.
+
+### Established Solution
+- `welcome.ps1` compares the cache's `latestVersion` with the deployed `VERSION` file next to the script and uses the cache's `installedVersion` only when `VERSION` is missing.
+- The `.update-notice` marker (one line, local `yyyyMMdd`) is written **only** by the automatic startup path (`-Startup`, passed by AHK and by the Git Bash banner hook). Manual `quake-help` displays the notice without writing or consuming the marker; marker write failures are swallowed.
+- The PowerShell helper returns before dot-sourcing `quake_common.ps1` unless a newer version is actually pending, so ordinary startup stays at baseline; the notice path costs ~12 ms once a day.
+- The Git Bash hook uses bash builtins only — `$(<file)`, `[[ $raw =~ ... ]]`, an integer version compare and `printf '%(%Y%m%d)T'` — instead of `grep`/`sed`/`sort -V`, keeping an up-to-date prompt at ~3 ms and a pending notice at ~15 ms, without dropping the notice. It strips CR/whitespace from `VERSION`, because a Windows checkout can deploy that file with CRLF line endings.
+- `install.ps1` deletes `.update-notice` on every deploy and `uninstall.ps1` removes it with the other artifacts.

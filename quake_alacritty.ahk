@@ -1608,7 +1608,7 @@ LaunchTerminalProcess()
 
             if (welcomeScript != "")
             {
-                argFlag := (g_ShowHelpOnStart == "tip") ? " -TipOnly" : ""
+                argFlag := (g_ShowHelpOnStart == "tip") ? " -TipOnly -Startup" : " -Startup"
                 Run(Format('alacritty.exe -e {1} -NoLogo -NoExit -ExecutionPolicy Bypass -File "{2}"{3}', configuredShell, welcomeScript, argFlag), startDir)
 
                 if (g_ShowHelpOnStart == "first-run" && g_FirstRun)

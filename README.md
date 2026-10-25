@@ -46,6 +46,7 @@ Features mouse-aware multi-monitor detection, dynamic 2×2 quad grid tiling, acr
 * **Window Swapping & Rotation (`Alt + Shift + Arrows`, `Alt + Shift + Space`):** Rearrange panes on the fly by swapping with adjacent windows or rotating all positions cyclically without losing keyboard focus.
 * **In-Terminal Startup Help Hint & Cheat Sheet (`quake-help`, `quake-env`):** Displays a sleek 1-line reminder (`💡 Tip: Type 'quake-help' to view keyboard shortcuts`) on every terminal start. Configurable via `ShowHelpOnStart=tip` in `config.ini` (`tip` for sleek 1-line hint, `banner` for full 20-line table, `none` for silent startup). Running `quake-help` displays the full electric cyan quickstart cheat sheet on demand anytime, while `quake-env` inspects your setup (OS, AutoHotkey, Alacritty, displays) and copies formatted Markdown to the clipboard for rapid bug reporting.
 * **One-Word Updates (`quake-update`):** `quake-update` checks for a newer release and upgrades a Git clone in place (fast-forward pull + installer). ZIP installs are pointed at the download page instead. `quake-update --check` (`-Check` in PowerShell) reports the version without changing anything.
+* **Once-a-Day Update Notice:** When the cached background check has seen a newer published release, terminal startup prints a single line — `⬆ Update available: v0.13.0 (you have v0.12.1). Type 'quake-update'.` — at most once per calendar day. The line comes from the local cache only (no network on launch), `quake-help` shows it while an update is pending, and `QUAKE_SHOW_HELP=none` suppresses startup messages.
 * **Taskbar Awareness:** Respects custom work areas (such as left-docked taskbars) using `MonitorGetWorkArea`.
 
 ---
@@ -156,6 +157,7 @@ quake-update --check    # Git Bash: report only, change nothing
 
 - **Git clone installs** are fast-forwarded with `git pull --ff-only` and then re-deployed by the freshly pulled `install.ps1`. A dirty working tree, a detached HEAD, or a branch without an upstream stops the update with a plain message. Nothing is ever stashed, reset, or discarded automatically.
 - **ZIP installs** have nothing to pull, so `quake-update` prints the download link and stops. Download the newer archive and run its installer to upgrade (your configuration is preserved).
+- **Watch for the notice:** the once-a-day line (`⬆ Update available: vX (you have vY). Type 'quake-update'.`) is rendered from the cached result of the background check, so it never slows down or blocks a new terminal. It appears at most once per calendar day; `QUAKE_SHOW_HELP=none` hides it along with the startup tip. Run `quake-update` to apply it.
 - **Your current shell keeps the old functions** until you open a new terminal pane. The update itself runs a child installer, so the running command is never replaced mid-flight.
 
 Manual fallback: `git pull` followed by `.\install.ps1` from the clone, or download the newer release and run its installer.
@@ -301,7 +303,7 @@ The uninstaller:
 - Removes the Windows Startup shortcut.
 - Removes the per-user "Installed Apps" registry entry (`HKCU\Software\Microsoft\Windows\CurrentVersion\Uninstall\QuakeAlacritty`).
 - Cleans up the `quake-help`, `quake-env` and `quake-update` commands from your PowerShell `$PROFILE` and Git Bash `~/.bashrc`.
-- Removes deployed application files and installer artifacts (`.install-state.json`, `VERSION`, `CONFIG_SCHEMA`, `quake_common.ps1`, `update.ps1`, `update-check.ps1`) while giving you the option to keep or delete your custom configuration files (`config.ini` and `alacritty.toml`). Choosing to delete the configuration also removes the timestamped `.bak` backups and the now-empty install folder.
+- Removes deployed application files and installer artifacts (`.install-state.json`, `.update-check.json`, `.update-notice`, `VERSION`, `CONFIG_SCHEMA`, `quake_common.ps1`, `update.ps1`, `update-check.ps1`) while giving you the option to keep or delete your custom configuration files (`config.ini` and `alacritty.toml`). Choosing to delete the configuration also removes the timestamped `.bak` backups and the now-empty install folder.
 
 ---
 
@@ -310,6 +312,8 @@ The uninstaller:
 - **`VERSION`** — one-line semantic version of the app (currently `0.12.0`), deployed to `%APPDATA%\alacritty\VERSION`.
 - **`CONFIG_SCHEMA`** — one-line integer that is bumped when `config.ini` keys are renamed or removed.
 - **`%APPDATA%\alacritty\.install-state.json`** — machine state written on every deploy (`version`, `configSchema`, `gitCommit`, `installedAt`, `updatedAt`, `shell`, `layout`, `targetDir`, `sourceType`, `sourceDir`). It is informational only; `VERSION`/`CONFIG_SCHEMA` remain the source of truth. `sourceType` records whether the install came from a `repo` clone or a `zip` archive, and `sourceDir` is the clone path used by `quake-update`.
+- **`%APPDATA%\alacritty\.update-check.json`** — cached result of the throttled background update check (`installedVersion`, `latestVersion`, `checkedAtUtc`, `nextCheckAtUtc`, `lastError`). Read by the terminal notice; never used as a version source of truth.
+- **`%APPDATA%\alacritty\.update-notice`** — the local date (`yyyyMMdd`) of the last automatic update notice, so it shows at most once per day. Written only by the startup path.
 - The AutoHotkey tray tooltip/menu and the `quake-help` cheat sheet read `VERSION` at runtime instead of embedding constants.
 - Run `.\install.ps1 -VerifyVersion` to assert that `VERSION` and the newest `CHANGELOG.md` heading agree (and the nearest git tag, once tags exist).
 
