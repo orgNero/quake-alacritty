@@ -324,55 +324,6 @@ function Test-QuakeVersionConsistency {
     }
 }
 
-function Invoke-QuakeUpdateCheck {
-    param(
-        [string]$InstalledVersion,
-        [int]$TimeoutSeconds = 3
-    )
-
-    $url = "https://raw.githubusercontent.com/orgNero/quake-alacritty/main/VERSION"
-    $result = [pscustomobject]@{
-        InstalledVersion = $InstalledVersion
-        AvailableVersion = $null
-        UpdateAvailable  = $false
-        CompareUrl       = $null
-        Error            = $null
-    }
-
-    try {
-        [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-        $response = Invoke-WebRequest -Uri $url -UseBasicParsing -TimeoutSec $TimeoutSeconds `
-            -Headers @{ "Cache-Control" = "no-cache"; "Pragma" = "no-cache" } -ErrorAction Stop
-        $remoteVersion = ([string]$response.Content).Trim()
-    } catch {
-        $result.Error = $_.Exception.Message
-        return $result
-    }
-
-    if ($remoteVersion -notmatch '^\d+\.\d+\.\d+([-+].*)?$') {
-        $result.Error = "Unexpected VERSION payload from $url"
-        return $result
-    }
-
-    $result.AvailableVersion = $remoteVersion
-
-    if ($InstalledVersion) {
-        $installedCore = ($InstalledVersion -replace '^v', '') -replace '[-+].*$', ''
-        $remoteCore = $remoteVersion -replace '[-+].*$', ''
-        try {
-            $result.UpdateAvailable = ([version]$remoteCore).CompareTo([version]$installedCore) -gt 0
-        } catch {
-            $result.UpdateAvailable = ($remoteVersion -ne $InstalledVersion)
-        }
-    }
-
-    if ($result.UpdateAvailable) {
-        $result.CompareUrl = "$RepositoryUrl/compare/v$InstalledVersion...v$remoteVersion"
-    }
-
-    return $result
-}
-
 # -----------------------------------------------------------------------------
 # Version metadata (VERSION / CONFIG_SCHEMA are the source of truth)
 # -----------------------------------------------------------------------------
@@ -777,7 +728,7 @@ $destIni  = Join-Path $TargetDir "config.ini"
 $destTomlExisted = Test-Path $destToml
 $destIniExisted  = Test-Path $destIni
 
-$appFiles = @("quake_alacritty.ahk", "welcome.ps1", "uninstall.ps1", "quake_common.ps1", "VERSION", "CONFIG_SCHEMA")
+$appFiles = @("quake_alacritty.ahk", "welcome.ps1", "uninstall.ps1", "quake_common.ps1", "update-check.ps1", "VERSION", "CONFIG_SCHEMA")
 foreach ($file in $appFiles) {
     $source = Join-Path $SourceDir $file
     $destination = Join-Path $TargetDir $file

@@ -472,3 +472,55 @@ function Compare-QuakeVersion {
         return ([string]::Compare($leftCore, $rightCore, [System.StringComparison]::OrdinalIgnoreCase))
     }
 }
+
+# Advisory-only update check shared by install.ps1 (-CheckForUpdates),
+# update-check.ps1 (background cache writer) and update.ps1 (-Check).
+# Never downloads or installs anything; returns a result object instead.
+function Invoke-QuakeUpdateCheck {
+    [CmdletBinding()]
+    param(
+        [string]$InstalledVersion,
+        [int]$TimeoutSeconds = 3,
+        [string]$Url = "https://raw.githubusercontent.com/orgNero/quake-alacritty/main/VERSION"
+    )
+
+    $repositoryUrl = "https://github.com/orgNero/quake-alacritty"
+    $result = [pscustomobject]@{
+        InstalledVersion = $InstalledVersion
+        AvailableVersion = $null
+        UpdateAvailable  = $false
+        CompareUrl       = $null
+        Error            = $null
+    }
+
+    try {
+        [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+        $response = Invoke-WebRequest -Uri $Url -UseBasicParsing -TimeoutSec $TimeoutSeconds `
+            -Headers @{ "Cache-Control" = "no-cache"; "Pragma" = "no-cache" } -ErrorAction Stop
+        $remoteVersion = ([string]$response.Content).Trim()
+    } catch {
+        $result.Error = $_.Exception.Message
+        return $result
+    }
+
+    if ($remoteVersion -notmatch '^\d+\.\d+\.\d+([-+].*)?$') {
+        $result.Error = "Unexpected VERSION payload from $Url"
+        return $result
+    }
+
+    $result.AvailableVersion = $remoteVersion
+
+    if ($InstalledVersion) {
+        try {
+            $result.UpdateAvailable = (Compare-QuakeVersion -Left $remoteVersion -Right $InstalledVersion) -gt 0
+        } catch {
+            $result.UpdateAvailable = ($remoteVersion -ne $InstalledVersion)
+        }
+    }
+
+    if ($result.UpdateAvailable) {
+        $result.CompareUrl = "$repositoryUrl/compare/v$InstalledVersion...v$remoteVersion"
+    }
+
+    return $result
+}
