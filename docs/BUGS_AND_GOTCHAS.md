@@ -315,3 +315,30 @@ With symbolic links in place, `A_ScriptFullPath` resolves directly to the reposi
 - Teardown posts `WM_CLOSE` to the process windows first; `quake_alacritty.ahk` handles `WM_CLOSE` by exiting through `OnExit` (`CleanupOnExit` destroys all dividers). A force-kill fallback runs only after the grace period.
 - `uninstall.ps1` deletes every known artifact explicitly (including the `HKCU\...\Uninstall\QuakeAlacritty` key) instead of relying on folder emptiness.
 - User `config.ini` is merged append-only (missing keys/sections only) and every rewrite is preceded by a timestamped `.bak`; `-ResetConfig` is the only path that replaces it.
+
+---
+
+## 16. Spontaneous Window Termination & `TargetError` (`WinShow`, `WinSetAlwaysOnTop`, `WinMove`)
+
+### Symptom
+- Spawning a terminal (`Win + §`) or retiling fails with a modal error dialog:
+  ```
+  Error: Target window not found.
+  Specifically: ahk_id <hwnd>
+  WinSetAlwaysOnTop(1, "ahk_id " hwnd)
+  ```
+
+### Root Cause
+1. **Invalid Shell Binary in `alacritty.toml`**: If `alacritty.toml` specifies a shell binary path that does not exist on the machine (e.g. hardcoded `C:\Program Files\Git\bin\bash.exe` when Git is installed in a custom directory like `C:\Users\<user>\Program\Git` or a portable folder), Alacritty starts, creates its top-level window for a split second, and immediately crashes with OS error 5 (`PermissionDenied` / `Åtkomst nekad`).
+2. **AutoHotkey v2 `TargetError`**: When AHK's window poll detects the transient window HWND and calls `TileAlacritty()`, Alacritty exits in the middle of the loop. In AHK v2, calling `WinShow`, `WinSetAlwaysOnTop`, `WinMove`, or `WinActivate` on an HWND that was destroyed mid-execution throws an unhandled `TargetError` exception, halting script execution.
+
+### Established Solution
+1. **Multi-Source Shell Path Discovery (`install.ps1`)**:
+   Locate `bash.exe` robustly across:
+   - Registry: `HKLM:\SOFTWARE\GitForWindows`, `HKCU:\SOFTWARE\GitForWindows` (`InstallPath`)
+   - Active PATH derivation: `(Get-Command git.exe).Source` -> `..\bin\bash.exe`
+   - Common install folders: `C:\Program Files\Git`, `C:\Program Files (x86)\Git`, `%LOCALAPPDATA%\Programs\Git`, `%ProgramW6432%\Git`
+   - Safe Fallback: If `bash.exe` cannot be verified with `Test-Path`, never write a non-existent binary path to `alacritty.toml`; fall back to `powershell.exe` with a clear warning.
+2. **Defensive Window Operations (`quake_alacritty.ahk`)**:
+   - Wrap `WinShow`, `WinSetAlwaysOnTop`, `WinMove`, `WinHide`, and `WinActivate` in `try` blocks.
+   - Verify `WinExist("ahk_id " hwnd)` before pushing new HWNDs to monitor tracking arrays (`g_MonitorWindows`).
