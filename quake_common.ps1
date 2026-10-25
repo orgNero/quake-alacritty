@@ -83,12 +83,35 @@ function Write-QuakeInstallState {
         [string]$GitCommit,
         [string]$InstalledAt,
         [string]$Shell,
-        [string]$Layout
+        [string]$Layout,
+        [ValidateSet("repo", "zip", "")]
+        [string]$SourceType,
+        [string]$SourceDir
     )
 
     $statePath = Get-QuakeInstallStatePath -TargetDir $TargetDir
     $now = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
     if ([string]::IsNullOrWhiteSpace($InstalledAt)) { $InstalledAt = $now }
+
+    # Preserve install-source fields when a caller does not supply them, so an
+    # older call site (or a future one) never blanks them.
+    $existing = $null
+    if (Test-Path $statePath) {
+        try {
+            $raw = Get-Content -Path $statePath -Raw -ErrorAction Stop
+            if (-not [string]::IsNullOrWhiteSpace($raw)) { $existing = $raw | ConvertFrom-Json }
+        } catch {
+            Write-Verbose "Could not read existing install state: $_"
+        }
+    }
+    if ([string]::IsNullOrWhiteSpace($SourceType) -and $null -ne $existing -and
+        $null -ne $existing.PSObject.Properties['sourceType']) {
+        $SourceType = [string]$existing.sourceType
+    }
+    if ([string]::IsNullOrWhiteSpace($SourceDir) -and $null -ne $existing -and
+        $null -ne $existing.PSObject.Properties['sourceDir']) {
+        $SourceDir = [string]$existing.sourceDir
+    }
 
     $state = [ordered]@{
         version      = $Version
@@ -99,6 +122,8 @@ function Write-QuakeInstallState {
         shell        = $Shell
         layout       = $Layout
         targetDir    = $TargetDir
+        sourceType   = $SourceType
+        sourceDir    = $SourceDir
     }
 
     $json = $state | ConvertTo-Json -Depth 4
