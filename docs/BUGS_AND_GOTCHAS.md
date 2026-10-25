@@ -357,3 +357,21 @@ With symbolic links in place, `A_ScriptFullPath` resolves directly to the reposi
 2. **Defensive Window Operations (`quake_alacritty.ahk`)**:
    - Wrap `WinShow`, `WinSetAlwaysOnTop`, `WinMove`, `WinHide`, and `WinActivate` in `try` blocks.
    - Verify `WinExist("ahk_id " hwnd)` before pushing new HWNDs to monitor tracking arrays (`g_MonitorWindows`).
+
+---
+
+## 17. Background Update Check: Console Flash, `A_NowUTC` and PS 5.1 JSON Nulls
+
+### Symptom
+- A short `powershell.exe` console flashes when the visor script starts or the visor is toggled.
+- The cache's `lastError` is written as `""` instead of `null`, so consumers cannot distinguish "failed" from "no error".
+
+### Root Cause
+- AutoHotkey's `Run()` starts a console-subsystem process with a visible console unless the `"Hide"` option (or `SW_HIDE`) is supplied. `RunWait` is not required to get a hidden child, and waiting on the check would block the AHK thread.
+- `A_NowUTC` is a fixed-width `yyyyMMddHHmmss` stamp. AHK compares digit-only strings numerically, so comparing it to a 14-digit `nextCheckAtUtc` is chronological **only** while both values keep that width; Nan/non-numeric values fall back to string comparison.
+- Windows PowerShell 5.1 converts `$null` to `""` when binding to a typed `[string]` parameter. A cache writer that takes `[string]$LastError` therefore emits `""`, not JSON `null`.
+
+### Established Solution
+- `MaybeCheckForUpdates()` resolves the checker next to the script first, then in `%APPDATA%\alacritty`, and spawns it with `Run(..., , "Hide")` inside a `try` block. It never uses `RunWait` and keeps a 5-minute in-memory debounce (duplicate-spawn guard), while the cache's `nextCheckAtUtc` (+24 h success, +1 h failure) drives retries from long-running instances.
+- The cache gate uses a targeted regex and compares the fixed-width UTC strings (`nextCheck > A_NowUTC`); a missing or malformed field is treated as due.
+- `update-check.ps1` declares `[object]$LastError` so `null` survives `ConvertTo-Json`, and writes the cache atomically (temp file + `Move-Item -Force`) while preserving unknown JSON fields for forward compatibility.
