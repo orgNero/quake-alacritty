@@ -45,6 +45,7 @@ Features mouse-aware multi-monitor detection, dynamic 2×2 quad grid tiling, acr
 * **Keyboard Pane Navigation (`Alt + Arrows`):** Hop typing focus between splits without touching the mouse, featuring deterministic tie-breaking across asymmetrical master layouts.
 * **Window Swapping & Rotation (`Alt + Shift + Arrows`, `Alt + Shift + Space`):** Rearrange panes on the fly by swapping with adjacent windows or rotating all positions cyclically without losing keyboard focus.
 * **In-Terminal Startup Help Hint & Cheat Sheet (`quake-help`, `quake-env`):** Displays a sleek 1-line reminder (`💡 Tip: Type 'quake-help' to view keyboard shortcuts`) on every terminal start. Configurable via `ShowHelpOnStart=tip` in `config.ini` (`tip` for sleek 1-line hint, `banner` for full 20-line table, `none` for silent startup). Running `quake-help` displays the full electric cyan quickstart cheat sheet on demand anytime, while `quake-env` inspects your setup (OS, AutoHotkey, Alacritty, displays) and copies formatted Markdown to the clipboard for rapid bug reporting.
+* **One-Word Updates (`quake-update`):** `quake-update` checks for a newer release and upgrades a Git clone in place (fast-forward pull + installer). ZIP installs are pointed at the download page instead. `quake-update --check` (`-Check` in PowerShell) reports the version without changing anything.
 * **Taskbar Awareness:** Respects custom work areas (such as left-docked taskbars) using `MonitorGetWorkArea`.
 
 ---
@@ -139,8 +140,28 @@ Re-running `install.ps1` is a safe upgrade, not a reinstall. The script reads `%
 > [!NOTE]
 > Re-running without `-Shell` or `-KeyboardLayout` no longer changes an existing shell block or rewrites a user-rebound `ToggleVisor` hotkey.
 
+#### Updating
+
+The installer registers a `quake-update` command in PowerShell and Git Bash:
+
+```powershell
+quake-update            # check, then update
+quake-update -Check     # PowerShell: report only, change nothing
+```
+
+```bash
+quake-update            # check, then update
+quake-update --check    # Git Bash: report only, change nothing
+```
+
+- **Git clone installs** are fast-forwarded with `git pull --ff-only` and then re-deployed by the freshly pulled `install.ps1`. A dirty working tree, a detached HEAD, or a branch without an upstream stops the update with a plain message. Nothing is ever stashed, reset, or discarded automatically.
+- **ZIP installs** have nothing to pull, so `quake-update` prints the download link and stops. Download the newer archive and run its installer to upgrade (your configuration is preserved).
+- **Your current shell keeps the old functions** until you open a new terminal pane. The update itself runs a child installer, so the running command is never replaced mid-flight.
+
+Manual fallback: `git pull` followed by `.\install.ps1` from the clone, or download the newer release and run its installer.
+
 ### Option B: Manual Setup
-1. Copy `alacritty.toml`, `quake_alacritty.ahk`, `config.ini`, `welcome.ps1`, `quake_common.ps1`, `uninstall.ps1`, `VERSION`, and `CONFIG_SCHEMA` to your configuration folder:
+1. Copy `alacritty.toml`, `quake_alacritty.ahk`, `config.ini`, `welcome.ps1`, `quake_common.ps1`, `update.ps1`, `update-check.ps1`, `uninstall.ps1`, `VERSION`, and `CONFIG_SCHEMA` to your configuration folder:
    ```
    C:\Users\<YourUsername>\AppData\Roaming\alacritty\
    ```
@@ -279,8 +300,8 @@ The uninstaller:
 - Requests a graceful shutdown of running Quake Alacritty instances (force-kill only as a fallback) so seam overlays are cleaned up.
 - Removes the Windows Startup shortcut.
 - Removes the per-user "Installed Apps" registry entry (`HKCU\Software\Microsoft\Windows\CurrentVersion\Uninstall\QuakeAlacritty`).
-- Cleans up the `quake-help` and `quake-env` commands from your PowerShell `$PROFILE` and Git Bash `~/.bashrc`.
-- Removes deployed application files and installer artifacts (`.install-state.json`, `VERSION`, `CONFIG_SCHEMA`, `quake_common.ps1`) while giving you the option to keep or delete your custom configuration files (`config.ini` and `alacritty.toml`). Choosing to delete the configuration also removes the timestamped `.bak` backups and the now-empty install folder.
+- Cleans up the `quake-help`, `quake-env` and `quake-update` commands from your PowerShell `$PROFILE` and Git Bash `~/.bashrc`.
+- Removes deployed application files and installer artifacts (`.install-state.json`, `VERSION`, `CONFIG_SCHEMA`, `quake_common.ps1`, `update.ps1`, `update-check.ps1`) while giving you the option to keep or delete your custom configuration files (`config.ini` and `alacritty.toml`). Choosing to delete the configuration also removes the timestamped `.bak` backups and the now-empty install folder.
 
 ---
 
@@ -288,7 +309,7 @@ The uninstaller:
 
 - **`VERSION`** — one-line semantic version of the app (currently `0.12.0`), deployed to `%APPDATA%\alacritty\VERSION`.
 - **`CONFIG_SCHEMA`** — one-line integer that is bumped when `config.ini` keys are renamed or removed.
-- **`%APPDATA%\alacritty\.install-state.json`** — machine state written on every deploy (`version`, `configSchema`, `gitCommit`, `installedAt`, `updatedAt`, `shell`, `layout`, `targetDir`). It is informational only; `VERSION`/`CONFIG_SCHEMA` remain the source of truth.
+- **`%APPDATA%\alacritty\.install-state.json`** — machine state written on every deploy (`version`, `configSchema`, `gitCommit`, `installedAt`, `updatedAt`, `shell`, `layout`, `targetDir`, `sourceType`, `sourceDir`). It is informational only; `VERSION`/`CONFIG_SCHEMA` remain the source of truth. `sourceType` records whether the install came from a `repo` clone or a `zip` archive, and `sourceDir` is the clone path used by `quake-update`.
 - The AutoHotkey tray tooltip/menu and the `quake-help` cheat sheet read `VERSION` at runtime instead of embedding constants.
 - Run `.\install.ps1 -VerifyVersion` to assert that `VERSION` and the newest `CHANGELOG.md` heading agree (and the nearest git tag, once tags exist).
 
