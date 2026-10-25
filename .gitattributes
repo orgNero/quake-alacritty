@@ -1,0 +1,27 @@
+# Line endings are normalized at the repository level.
+# Git always stores LF in the index; each checkout gets the platform default
+# (CRLF on Windows, LF on Linux/WSL), so diffs stay clean on every machine and
+# editors that save CRLF cannot produce whole-file rewrites.
+* text=auto
+
+# Text sources deployed and executed by the installer / AutoHotkey runtime
+*.ps1   text
+*.ahk   text
+*.md    text
+*.toml  text
+*.ini   text
+*.yml   text
+*.json  text
+
+# Single-line metadata markers
+VERSION        text
+CONFIG_SCHEMA  text
+LICENSE        text
+
+# Binary assets are never converted
+*.png  binary
+*.ico  binary
+*.exe  binary
+*.zip  binary
+*.gif  binary
+*.jpg  binary
