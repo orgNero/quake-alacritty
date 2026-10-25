@@ -375,3 +375,20 @@ With symbolic links in place, `A_ScriptFullPath` resolves directly to the reposi
 - `MaybeCheckForUpdates()` resolves the checker next to the script first, then in `%APPDATA%\alacritty`, and spawns it with `Run(..., , "Hide")` inside a `try` block. It never uses `RunWait` and keeps a 5-minute in-memory debounce (duplicate-spawn guard), while the cache's `nextCheckAtUtc` (+24 h success, +1 h failure) drives retries from long-running instances.
 - The cache gate uses a targeted regex and compares the fixed-width UTC strings (`nextCheck > A_NowUTC`); a missing or malformed field is treated as due.
 - `update-check.ps1` declares `[object]$LastError` so `null` survives `ConvertTo-Json`, and writes the cache atomically (temp file + `Move-Item -Force`) while preserving unknown JSON fields for forward compatibility.
+
+---
+
+## 18. Updater Process Handoff: `Start-Process -Wait` and PS 5.1 Native Stderr
+
+### Symptom
+- `quake-update` appears to hang forever after the child installer prints its success summary.
+- A failing `git` probe (`rev-parse '@{u}'`, `pull --ff-only`) aborts the updater with a raw `NativeCommandError` instead of a plain message, even though stderr was redirected.
+
+### Root Cause
+- `Start-Process -Wait` waits for the started process **and its descendants**. The installer relaunches AutoHotkey and exits, but the AHK grandchild keeps the wait alive indefinitely.
+- Windows PowerShell 5.1 converts native stderr into a terminating `NativeCommandError` while `$ErrorActionPreference = "Stop"`. Redirecting with `2>$null` or `2> file` does **not** prevent the termination; only `2>&1` combined with a relaxed preference (or a helper that relaxes it) lets the caller inspect `$LASTEXITCODE`.
+
+### Established Solution
+- `update.ps1` launches the installer with the call operator (`& $powerShellExe -File $installer ...`) and reads `$LASTEXITCODE`. That waits for the direct child only, so the detached AHK process cannot block the updater.
+- All git calls go through `Invoke-QuakeGit`, which temporarily sets `$ErrorActionPreference = "Continue"`, redirects stderr to a temp file, restores the preference in `finally`, and returns `ExitCode`/`Lines`/`Text`. Every failure path then prints a plain-language sentence; theme detection and error extraction never see PowerShell's stderr decoration.
+- Prefer probing capabilities (`rev-parse --show-toplevel`) and checking `$LASTEXITCODE` over assuming a clean stderr stream from `git`.
