@@ -2,13 +2,102 @@
 [CmdletBinding()]
 param(
     [switch]$TipOnly,
-    [switch]$EnvInfo
+    [switch]$EnvInfo,
+    [switch]$Startup
 )
 
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 $OutputEncoding = [System.Text.Encoding]::UTF8
 
+# One-line advisory notice fed by the cached background update check. Reads
+# local files only, never touches the network, and never throws.
+function global:Show-QuakeUpdateNotice {
+    param([switch]$MarkShown)
+
+    try {
+        $targetDir = if ($env:APPDATA) { Join-Path $env:APPDATA "alacritty" } else { $null }
+
+        $cachePath = $null
+        if ($targetDir) {
+            $candidate = Join-Path $targetDir ".update-check.json"
+            if (Test-Path $candidate) { $cachePath = $candidate }
+        }
+        if (-not $cachePath) {
+            $localCache = Join-Path $PSScriptRoot ".update-check.json"
+            if (Test-Path $localCache) { $cachePath = $localCache }
+        }
+        if (-not $cachePath) { return }
+
+        try {
+            $raw = Get-Content -Path $cachePath -Raw -ErrorAction Stop
+            if ([string]::IsNullOrWhiteSpace($raw)) { return }
+            $cache = $raw | ConvertFrom-Json -ErrorAction Stop
+        } catch {
+            return
+        }
+
+        $latest = [string]$cache.latestVersion
+        if ([string]::IsNullOrWhiteSpace($latest) -or $latest -notmatch '^v?\d+\.\d+\.\d+([-+].*)?$') { return }
+
+        # The deployed VERSION file wins over the cache: after quake-update the
+        # cache can still carry the pre-update installedVersion until the next
+        # background check runs, which would keep the notice alive.
+        $installed = $null
+        $versionPath = Join-Path $PSScriptRoot "VERSION"
+        if (Test-Path $versionPath) {
+            try { $installed = (Get-Content -Path $versionPath -Raw -ErrorAction Stop).Trim() } catch { }
+        }
+        if ([string]::IsNullOrWhiteSpace($installed)) { $installed = [string]$cache.installedVersion }
+        if ([string]::IsNullOrWhiteSpace($installed)) { return }
+
+        # Shared semver helper; falls back to a local [version] comparison below.
+        $commonPath = Join-Path $PSScriptRoot "quake_common.ps1"
+        if (Test-Path $commonPath) { try { . $commonPath } catch { } }
+
+        $isNewer = $false
+        try {
+            if (Get-Command Compare-QuakeVersion -ErrorAction SilentlyContinue) {
+                $isNewer = (Compare-QuakeVersion -Left $latest -Right $installed) -gt 0
+            } else {
+                $latestCore = ($latest -replace '^v', '') -replace '[-+].*$', ''
+                $installedCore = ($installed -replace '^v', '') -replace '[-+].*$', ''
+                $isNewer = ([version]$latestCore).CompareTo([version]$installedCore) -gt 0
+            }
+        } catch {
+            $isNewer = ($latest -ne $installed)
+        }
+        if (-not $isNewer) { return }
+
+        $markerPath = if ($targetDir) { Join-Path $targetDir ".update-notice" } else { $null }
+        $today = (Get-Date).ToString("yyyyMMdd")
+        if ($MarkShown -and $markerPath -and (Test-Path $markerPath)) {
+            try {
+                $shown = (Get-Content -Path $markerPath -Raw -ErrorAction Stop).Trim()
+                if ($shown -eq $today) { return }
+            } catch { }
+        }
+
+        $esc     = [char]27
+        $cSub    = $esc + "[38;2;148;163;184m"    # Slate 400
+        $cKey    = $esc + "[1;38;2;56;189;248m"   # Bright Cyan (#38bdf8)
+        $cYellow = $esc + "[38;2;251;191;36m"    # Amber 400
+        $cReset  = $esc + "[0m"
+        $chArrow = [char]::ConvertFromUtf32(0x2B06) # Upwards arrow
+
+        Write-Host ("  " + $cYellow + $chArrow + " " + $cSub + "Update available: v" + $latest + " (you have v" + $installed + "). Type '" + $cKey + "quake-update" + $cSub + "'." + $cReset)
+
+        # Only the automatic startup path consumes the once-a-day marker.
+        if ($MarkShown -and $markerPath) {
+            try {
+                [System.IO.File]::WriteAllText($markerPath, $today + "`n", (New-Object System.Text.UTF8Encoding($false)))
+            } catch { }
+        }
+    } catch { }
+}
+
 function global:Show-QuakeTip {
+    param([switch]$MarkShown)
+
     $esc      = [char]27
     $cSub     = $esc + "[38;2;148;163;184m"    # Slate 400
     $cKey     = $esc + "[1;38;2;56;189;248m"   # Bright Cyan (#38bdf8)
@@ -18,10 +107,13 @@ function global:Show-QuakeTip {
 
     Write-Host ""
     Write-Host ("  " + $cYellow + $chBulb + " " + $cSub + "Tip: Type '" + $cKey + "quake-help" + $cSub + "' to view keyboard shortcuts." + $cReset)
+    Show-QuakeUpdateNotice -MarkShown:$MarkShown
     Write-Host ""
 }
 
 function global:Show-QuakeCheatsheet {
+    param([switch]$MarkShown)
+
     # Resolve config.ini location (%APPDATA%\alacritty\config.ini or local script directory)
     $configPath = Join-Path $env:APPDATA "alacritty\config.ini"
     if (-not (Test-Path $configPath)) {
@@ -189,6 +281,7 @@ function global:Show-QuakeCheatsheet {
     if ($tipPad -lt 0) { $tipPad = 0 }
     Write-Host ($cBorder + $chVert + $cYellow + "  " + $chBulb + " " + $cSub + "Tip: Type '" + $cKey + $tipCmd + $cSub + "' anytime to redisplay this cheat sheet." + (" " * $tipPad) + $cBorder + $chVert + $cReset)
     Write-Host ($cBorder + $chBotLeft + ($chHoriz * ($boxWidth - 2)) + $chBotRight + $cReset)
+    Show-QuakeUpdateNotice -MarkShown:$MarkShown
     Write-Host ("  " + $cSub + "Report bugs & suggest features: " + $cBorder + "https://github.com/orgNero/quake-alacritty/issues" + $cReset)
     Write-Host ""
 }
@@ -271,7 +364,7 @@ function global:quake-env {
 if ($EnvInfo) {
     Show-QuakeEnvironment
 } elseif ($TipOnly) {
-    Show-QuakeTip
+    Show-QuakeTip -MarkShown:$Startup
 } else {
-    Show-QuakeCheatsheet
+    Show-QuakeCheatsheet -MarkShown:$Startup
 }
