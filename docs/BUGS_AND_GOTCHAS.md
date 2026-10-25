@@ -167,6 +167,21 @@ When AutoHotkey issues `WinMove`, `WinHide`, or recreates divider GUIs, the Wind
 ### Established Solution
 Always explicitly re-assert focus on the active terminal window using `WinActivate("ahk_id " targetHwnd)` after layout operations.
 
+### Visor Hide: Hidden Foreground Windows Keep Receiving Keystrokes
+
+#### Symptom
+- `Win + §` hides the visor, but typing still lands in the (now invisible) terminal. The previous app or desktop never regains keyboard focus.
+
+#### Root Cause
+`WinHide` maps to `ShowWindow(SW_HIDE)`, which sends `WM_SHOWWINDOW` but not `WM_ACTIVATE`/`WM_ACTIVATEAPP`. Windows is allowed to leave the hidden HWND as the foreground window, so keystrokes keep being delivered to it. Hiding the panes in a loop makes the OS's "activate another window" choice even less predictable, especially in isolated multi-monitor mode where other visors stay visible and topmost.
+
+#### Established Solution ([`HideVisorAndReturnFocus()` in `quake_alacritty.ahk`](../quake_alacritty.ahk))
+- `CaptureVisorReturnWindow()` records the last non-visor foreground window before the visor takes focus; it is refreshed on every toggle where the foreground is not a pane.
+- `HideVisorAndReturnFocus()` activates that target **before** the `WinHide` loop, so the visor is never the foreground window when it disappears.
+- Post-hide verification (`ActivateReturnWindow()`, with `SwitchToThisWindow` as a fallback for foreground-lock refusals) re-asserts the target, then clears the tracker.
+- If the target was closed/minimized while the visor was open, the first usable window in Z-order (`WinGetList()` order, skipping hidden/minimized/cloaked/tool/owned/`WS_EX_NOACTIVATE` windows, shell surfaces and all `alacritty.exe` windows) becomes the fallback.
+- Focus is only reclaimed when one of the panes being hidden owns it; hiding the visor must never steal focus from an app the user switched to while it was open.
+
 ---
 
 ## 9. Process Reaping from Transient Job Objects
