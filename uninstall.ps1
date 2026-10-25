@@ -145,9 +145,11 @@ $artifactFiles = @(
     "quake_alacritty.ahk",
     "welcome.ps1",
     "quake_common.ps1",
+    "update-check.ps1",
     "VERSION",
     "CONFIG_SCHEMA",
     ".install-state.json",
+    ".update-check.json",
     "uninstall.ps1"
 )
 foreach ($file in $artifactFiles) {
