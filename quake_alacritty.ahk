@@ -59,6 +59,9 @@ global g_MonitorSinglePaneSide := Map()  ; monId (int) -> string ("", "left", "r
 ; Reentrancy lock preventing watchdog from firing during active layout transitions
 global g_LayoutLock            := 0
 
+; Last non-visor foreground window; focus returns here when the visor is hidden
+global g_VisorReturnHwnd       := 0
+
 ; Helper: Resolves configuration file location and loads user preferences
 LoadConfig()
 {
@@ -1686,6 +1689,166 @@ LaunchNewTerminal(targetMon)
     }
 }
 
+; -------------------------------------------------------------
+; Focus Handoff on Visor Hide
+; -------------------------------------------------------------
+
+; Helper: True when the given HWND belongs to a terminal pane
+IsAlacrittyWindow(hwnd)
+{
+    if (!hwnd || !WinExist("ahk_id " hwnd))
+        return false
+    try {
+        return (WinGetProcessName("ahk_id " hwnd) = "alacritty.exe")
+    } catch {
+        return false
+    }
+}
+
+; Helper: True for desktop/shell surfaces and cloaked UWP windows
+IsShellOrCloakedWindow(hwnd)
+{
+    cls := ""
+    try {
+        cls := WinGetClass("ahk_id " hwnd)
+    } catch {
+        cls := ""
+    }
+    if (cls = "Progman" || cls = "WorkerW" || cls = "Shell_TrayWnd" || cls = "Shell_SecondaryTrayWnd")
+        return true
+
+    cloaked := 0
+    try {
+        DllCall("dwmapi\DwmGetWindowAttribute", "Ptr", hwnd, "UInt", 14, "UInt*", &cloaked, "UInt", 4)
+    } catch {
+        cloaked := 0
+    }
+    return cloaked != 0
+}
+
+; Helper: Remembers the last non-visor foreground window as the hide target
+CaptureVisorReturnWindow()
+{
+    global g_VisorReturnHwnd
+
+    fg := WinActive("A")
+    if (!fg || IsAlacrittyWindow(fg) || IsShellOrCloakedWindow(fg))
+        return
+    g_VisorReturnHwnd := fg
+}
+
+; Helper: Membership test that works on HWND arrays
+ContainsHwnd(hwndList, hwnd)
+{
+    if (!hwnd)
+        return false
+    for item in hwndList
+    {
+        if (item == hwnd)
+            return true
+    }
+    return false
+}
+
+; Helper: Filters candidate windows for the Z-order fallback beneath the visor
+IsReturnCandidate(hwnd, excluded)
+{
+    if (!hwnd || IsAlacrittyWindow(hwnd))
+        return false
+    if (ContainsHwnd(excluded, hwnd))
+        return false
+
+    try {
+        if (!DllCall("IsWindowVisible", "Ptr", hwnd))
+            return false
+        if (WinGetMinMax("ahk_id " hwnd) == -1)             ; minimized
+            return false
+        if (WinGetExStyle("ahk_id " hwnd) & 0x80)           ; WS_EX_TOOLWINDOW
+            return false
+        if (WinGetExStyle("ahk_id " hwnd) & 0x08000000)     ; WS_EX_NOACTIVATE
+            return false
+        if (DllCall("GetWindow", "Ptr", hwnd, "UInt", 4, "Ptr")) ; GW_OWNER
+            return false
+        if (IsShellOrCloakedWindow(hwnd))
+            return false
+    } catch {
+        return false
+    }
+
+    return true
+}
+
+; Helper: First usable window in Z-order (visually beneath the visor)
+FindReturnWindowUnderVisor(excluded)
+{
+    for hwnd in WinGetList()
+    {
+        if (IsReturnCandidate(hwnd, excluded))
+            return hwnd
+    }
+    return 0
+}
+
+; Helper: Resolves where focus should go when the visor is hidden
+ResolveVisorReturnWindow(excluded)
+{
+    global g_VisorReturnHwnd
+
+    if (g_VisorReturnHwnd && IsReturnCandidate(g_VisorReturnHwnd, excluded))
+        return g_VisorReturnHwnd
+    return FindReturnWindowUnderVisor(excluded)
+}
+
+; Helper: Forces a window to the foreground, with an undocumented fallback
+ActivateReturnWindow(hwnd)
+{
+    if (!hwnd || !WinExist("ahk_id " hwnd))
+        return false
+
+    try WinActivate("ahk_id " hwnd)
+    if (WinActive("A") == hwnd)
+        return true
+
+    ; SetForegroundWindow can be refused; SwitchToThisWindow bypasses the lock
+    try DllCall("SwitchToThisWindow", "Ptr", hwnd, "Int", 1)
+    return (WinActive("A") == hwnd)
+}
+
+; Helper: Hides every visor pane and releases keyboard focus from the visor
+HideVisorAndReturnFocus(visorWindows, mon)
+{
+    global g_VisorReturnHwnd
+
+    ; Only reclaim focus when one of the panes being hidden owns it. If the user
+    ; switched to another app while the visor was open, leave their focus alone.
+    reclaimFocus := ContainsHwnd(visorWindows, WinActive("A"))
+
+    target := reclaimFocus ? ResolveVisorReturnWindow(visorWindows) : 0
+
+    ; Leave the visor before hiding it: ShowWindow(SW_HIDE) does not send
+    ; WM_ACTIVATE, so a hidden foreground window keeps receiving keystrokes.
+    if (target)
+        try WinActivate("ahk_id " target)
+
+    for hwnd in visorWindows
+        try WinHide("ahk_id " hwnd)
+    ClearDividers(mon)
+
+    if (!reclaimFocus)
+        return
+
+    if (target && ActivateReturnWindow(target))
+    {
+        g_VisorReturnHwnd := 0
+        return
+    }
+
+    ; Target is stale (closed/minimized while open) or activation was refused
+    if (ContainsHwnd(visorWindows, WinActive("A")))
+        ActivateReturnWindow(FindReturnWindowUnderVisor(visorWindows))
+    g_VisorReturnHwnd := 0
+}
+
 ; Toggles the terminal visor on the display containing the mouse cursor
 ToggleVisor()
 {
@@ -1694,6 +1857,9 @@ ToggleVisor()
 
     ; Detect monitor containing mouse cursor
     targetMon := GetMouseMonitor()
+
+    ; Remember where focus must return when this visor is hidden
+    CaptureVisorReturnWindow()
 
     if (g_MultiMonitorMode == "isolated")
     {
@@ -1724,10 +1890,8 @@ ToggleVisor()
 
         if (anyVisible)
         {
-            ; Hide all terminals on this display
-            for hwnd in monWindows
-                try WinHide("ahk_id " hwnd)
-            ClearDividers(targetMon)
+            ; Hide all terminals on this display and hand focus back
+            HideVisorAndReturnFocus(monWindows, targetMon)
         }
         else
         {
@@ -1766,16 +1930,15 @@ ToggleVisor()
         currentMon := GetWindowMonitor(windows[1])
         if (currentMon != 0 && currentMon != targetMon)
         {
+            CaptureVisorReturnWindow()
             TileAlacritty(targetMon)
             if (windows.Length > 0 && WinExist("ahk_id " windows[1]))
                 try WinActivate("ahk_id " windows[1])
             return
         }
 
-        ; If already showing on the mouse monitor -> hide all
-        for hwnd in windows
-            try WinHide("ahk_id " hwnd)
-        ClearDividers(0)
+        ; If already showing on the mouse monitor -> hide all and return focus
+        HideVisorAndReturnFocus(windows, 0)
     }
     else
     {
