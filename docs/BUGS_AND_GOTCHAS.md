@@ -21,7 +21,7 @@ Alacritty on Windows does not create a single window per process. Under the hood
 
 A naive query like `WinGetList("ahk_exe alacritty.exe")` grabs all of these auxiliary HWNDs, inflating the terminal count.
 
-### Established Solution ([`GetAlacrittyWindows()` in `quake_alacritty.ahk`](../quake_alacritty.ahk))
+### Established Solution ([`GetAlacrittyWindows()` in `quake_alacritty.ahk`](../src/quake_alacritty.ahk))
 Strictly filter enumerated windows using three criteria:
 1. **Window Class**: Must equal `"Window Class"` (the actual terminal canvas).
 2. **Extended Window Style**: Must NOT have `WS_EX_TOOLWINDOW` (`0x80`).
@@ -46,7 +46,7 @@ if (cls != "Window Class" || (exStyle & 0x80) || hasOwner)
 ### Root Cause
 The Windows API (`EnumWindows` / AHK's `WinGetList`) returns windows in **Z-order** (most recently active window at index 1). If window positions are calculated directly from `WinGetList`, focusing pane 2 promotes it to index 1, immediately swapping its slot with pane 1.
 
-### Established Solution ([`SyncWindowOrder()` in `quake_alacritty.ahk`](../quake_alacritty.ahk))
+### Established Solution ([`SyncWindowOrder()` in `quake_alacritty.ahk`](../src/quake_alacritty.ahk))
 - A global persistent array (`g_AlacrittyOrder`) preserves the assigned slot of each window across operations.
 - `SyncWindowOrder()` compares live windows against `g_AlacrittyOrder`:
   - Retains existing windows in their previous order.
@@ -175,7 +175,7 @@ Always explicitly re-assert focus on the active terminal window using `WinActiva
 #### Root Cause
 `WinHide` maps to `ShowWindow(SW_HIDE)`, which sends `WM_SHOWWINDOW` but not `WM_ACTIVATE`/`WM_ACTIVATEAPP`. Windows is allowed to leave the hidden HWND as the foreground window, so keystrokes keep being delivered to it. Hiding the panes in a loop makes the OS's "activate another window" choice even less predictable, especially in isolated multi-monitor mode where other visors stay visible and topmost.
 
-#### Established Solution ([`HideVisorAndReturnFocus()` in `quake_alacritty.ahk`](../quake_alacritty.ahk))
+#### Established Solution ([`HideVisorAndReturnFocus()` in `quake_alacritty.ahk`](../src/quake_alacritty.ahk))
 - `CaptureVisorReturnWindow()` records the last non-visor foreground window before the visor takes focus; it is refreshed on every toggle where the foreground is not a pane.
 - `HideVisorAndReturnFocus()` activates that target **before** the `WinHide` loop, so the visor is never the foreground window when it disappears.
 - Post-hide verification (`ActivateReturnWindow()`, with `SwitchToThisWindow` as a fallback for foreground-lock refusals) re-asserts the target, then clears the tracker.
@@ -301,13 +301,13 @@ Because AutoHotkey was not receiving any window destruction notification, the GU
 - Code changes in `quake_alacritty.ahk` inside the git repository are saved and committed, and `Alt + Ctrl + R` is pressed inside Alacritty, but the running script behaves identically to the old code.
 
 ### Root Cause
-`install.ps1` by default copies repository files to `%APPDATA%\alacritty` and registers the startup shortcut to point to `%APPDATA%\alacritty\quake_alacritty.ahk`.
+`install.ps1` by default copies repository files from `src\` to `%APPDATA%\alacritty` and registers the startup shortcut to point to `%APPDATA%\alacritty\quake_alacritty.ahk`.
 When developing in `repos\quake-alacritty`, editing the repository file does not touch the `%APPDATA%` copy. When AutoHotkey executes `Reload()` via `Alt + Ctrl + R`, it re-reads its own script path (`A_ScriptFullPath` = `%APPDATA%\alacritty\quake_alacritty.ahk`), loading the stale deployed copy instead of the repository file.
 
 ### Established Solution
 Always link `%APPDATA%\alacritty` to the repository directory using symbolic links via `cmd /c mklink` (supported without admin rights when Windows Developer Mode is enabled):
 ```powershell
-cmd /c "del `"%APPDATA%\alacritty\quake_alacritty.ahk`" && mklink `"%APPDATA%\alacritty\quake_alacritty.ahk`" `"C:\Users\maxve\repos\quake-alacritty\quake_alacritty.ahk`""
+cmd /c "del `"%APPDATA%\alacritty\quake_alacritty.ahk`" && mklink `"%APPDATA%\alacritty\quake_alacritty.ahk`" `"C:\Users\maxve\repos\quake-alacritty\src\quake_alacritty.ahk`""
 ```
 With symbolic links in place, `A_ScriptFullPath` resolves directly to the repository file, guaranteeing that in-process reload (`Alt + Ctrl + R`) immediately executes live code edits.
 
@@ -432,8 +432,31 @@ With symbolic links in place, `A_ScriptFullPath` resolves directly to the reposi
 - Tags and branch tips move independently of releases and pull requests; only an explicit assertion catches drift.
 
 ### Established Solution
-- The workflow stages into `$env:RUNNER_TEMP`, then calls `Compress-Archive -Path (Join-Path $staging '*')` and re-extracts the archive to assert every expected file exists at the root.
+- The workflow stages into `$env:RUNNER_TEMP`, then calls `Compress-Archive -Path (Join-Path $staging '*')` and re-extracts the archive to assert every expected file exists at its expected path (`Install.cmd`/`README.md`/`LICENSE` at the root, runtime files under `src\`).
 - `.gitattributes` pins `*.cmd text eol=crlf`, and the repository stores LF in the index while checkouts (including `windows-latest`) get CRLF.
 - `Invoke-QuakeUpdateCheck` reads `tag_name`, strips a leading `v`, validates semver and returns the same `InstalledVersion`/`AvailableVersion`/`UpdateAvailable`/`CompareUrl`/`Error` object as before. It maps 404 to `No published release found yet.` and 403 to a short rate-limit message, and deliberately **never** falls back to raw `main/VERSION`: branch code must not be advertised as a release.
 - The workflow runs `install.ps1 -VerifyVersion` plus its own tag/heading/date assertions and fails without editing any file. A broken published release is fixed by shipping the next patch version, never by rewriting the tag.
-- `Install.cmd` stays deliberately dumb (sibling-file guard, one `powershell -File` call, `if errorlevel 1 pause`). Mark-of-the-Web/SmartScreen is documented in `README.md` rather than bypassed.
+- `Install.cmd` stays deliberately dumb (guard for `src\install.ps1`, one `powershell -File` call, `if errorlevel 1 pause`). Mark-of-the-Web/SmartScreen is documented in `README.md` rather than bypassed.
+
+---
+
+## 21. `src/` Source Layout and the One-Time Updater Migration
+
+### Symptom
+- After pulling the `src/` layout, `quake-update` stops with `install.ps1 was not found in the updated clone` even though the pull succeeded.
+- A fresh clone install records `sourceType: zip` and a `sourceDir` pointing at `src\` instead of the clone root.
+- `install.ps1 -VerifyVersion` reports `CHANGELOG.md is missing` after the layout change.
+- The release ZIP extracts `Install.cmd` but the launcher cannot find the installer.
+
+### Root Cause
+- The 0.13.0 updater hard-codes `<sourceDir>\install.ps1`. Moving the installer into `src/` invalidates that path in the already-deployed copy; the old script cannot be fixed retroactively.
+- `$SourceDir = $PSScriptRoot` now names `src/`, but both the version check and the `sourceType` probe previously assumed it was also the repository root.
+- `CHANGELOG.md` deliberately stays at the repository root (it is release metadata, not a runtime file), so it is no longer next to `VERSION`.
+- `Install.cmd` must point at `src\install.ps1`, and the ZIP must preserve the `src/` folder for the same relative path to work in the repository and in the archive.
+
+### Established Solution
+- `install.ps1` computes `$RepoRoot = Split-Path $SourceDir -Parent` and passes it to `Test-QuakeVersionConsistency` for `CHANGELOG.md`; `sourceType` is `repo` only when the Git top-level equals `$RepoRoot`, and `sourceDir` records that root (never `src\`).
+- `update.ps1` probes `<sourceDir>\src\install.ps1` first, then `<sourceDir>\install.ps1` for installs recorded before the layout change.
+- The release workflow reads `src/VERSION`, runs `src/install.ps1 -VerifyVersion`, and stages the runtime files under `src/` in the ZIP; `Install.cmd` at the archive root launches `src\install.ps1`.
+- Deployed files still land flat in `%APPDATA%\alacritty`; only the source and ZIP layout changed. `quake_alacritty.ahk`, `welcome.ps1`, `update-check.ps1` and `uninstall.ps1` use sibling paths (`A_ScriptDir` / `$PSScriptRoot`) and need no changes.
+- Existing clone installs must run `.\src\install.ps1` once after pulling the layout change. ZIP installs are unaffected because they re-extract the newer archive.

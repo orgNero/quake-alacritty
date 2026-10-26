@@ -35,15 +35,15 @@ jobs:
           $ErrorActionPreference = 'Stop'
           $tagVersion = "${{ github.ref_name }}".TrimStart('v')
 
-          $version = (Get-Content -Path ./VERSION -Raw).Trim()
+          $version = (Get-Content -Path ./src/VERSION -Raw).Trim()
           if ($version -ne $tagVersion) {
             Write-Error "VERSION ($version) does not match tag ($tagVersion)."
             exit 1
           }
 
-          & ./install.ps1 -VerifyVersion
+          & ./src/install.ps1 -VerifyVersion
           if ($LASTEXITCODE -ne 0) {
-            Write-Error "install.ps1 -VerifyVersion failed."
+            Write-Error "src/install.ps1 -VerifyVersion failed."
             exit 1
           }
 
@@ -67,7 +67,12 @@ jobs:
         shell: powershell
         run: |
           $ErrorActionPreference = 'Stop'
-          $files = @(
+          $rootFiles = @(
+            'Install.cmd',
+            'README.md',
+            'LICENSE'
+          )
+          $sourceFiles = @(
             'quake_alacritty.ahk',
             'alacritty.toml',
             'config.ini',
@@ -77,26 +82,32 @@ jobs:
             'quake_common.ps1',
             'update.ps1',
             'update-check.ps1',
-            'Install.cmd',
             'VERSION',
-            'CONFIG_SCHEMA',
-            'README.md',
-            'LICENSE'
+            'CONFIG_SCHEMA'
           )
 
           $staging = Join-Path $env:RUNNER_TEMP 'staging'
           if (Test-Path $staging) { Remove-Item $staging -Recurse -Force }
-          New-Item -ItemType Directory -Path $staging -Force | Out-Null
+          $stagingSrc = Join-Path $staging 'src'
+          New-Item -ItemType Directory -Path $stagingSrc -Force | Out-Null
 
-          foreach ($file in $files) {
+          foreach ($file in $rootFiles) {
             if (-not (Test-Path $file)) {
               Write-Error "Distribution file is missing: $file"
               exit 1
             }
             Copy-Item -Path $file -Destination $staging -Force
           }
+          foreach ($file in $sourceFiles) {
+            $relative = Join-Path 'src' $file
+            if (-not (Test-Path $relative)) {
+              Write-Error "Distribution file is missing: $relative"
+              exit 1
+            }
+            Copy-Item -Path $relative -Destination $stagingSrc -Force
+          }
 
-          $version = (Get-Content -Path ./VERSION -Raw).Trim()
+          $version = (Get-Content -Path ./src/VERSION -Raw).Trim()
           $zipName = "quake-alacritty-v$version.zip"
           Compress-Archive -Path (Join-Path $staging '*') -DestinationPath $zipName -Force
 
@@ -108,19 +119,25 @@ jobs:
           $extracted = Join-Path $env:RUNNER_TEMP 'verify-zip'
           if (Test-Path $extracted) { Remove-Item $extracted -Recurse -Force }
           Expand-Archive -Path $zipName -DestinationPath $extracted -Force
-          foreach ($file in $files) {
+          foreach ($file in $rootFiles) {
             if (-not (Test-Path (Join-Path $extracted $file))) {
               Write-Error "ZIP is missing $file"
               exit 1
             }
           }
-          Write-Host "Built $zipName with $($files.Count) files."
+          foreach ($file in $sourceFiles) {
+            if (-not (Test-Path (Join-Path $extracted "src\$file"))) {
+              Write-Error "ZIP is missing src\$file"
+              exit 1
+            }
+          }
+          Write-Host "Built $zipName with $($rootFiles.Count + $sourceFiles.Count) files."
 
       - name: Extract CHANGELOG release notes
         shell: powershell
         run: |
           $ErrorActionPreference = 'Stop'
-          $version = (Get-Content -Path ./VERSION -Raw).Trim()
+          $version = (Get-Content -Path ./src/VERSION -Raw).Trim()
           $changelog = Get-Content -Path ./CHANGELOG.md -Raw
 
           $pattern = "(?ms)^##\s*\[" + [regex]::Escape($version) + "\][^\r\n]*\r?\n(.*?)(?=^##\s*\[|\z)"
@@ -148,7 +165,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           $ErrorActionPreference = 'Stop'
-          $version = (Get-Content -Path ./VERSION -Raw).Trim()
+          $version = (Get-Content -Path ./src/VERSION -Raw).Trim()
           $zipName = "quake-alacritty-v$version.zip"
           if (-not (Test-Path $zipName)) {
             Write-Error "Release asset is missing: $zipName"
