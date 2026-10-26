@@ -35,7 +35,7 @@ _None_
 - `install.ps1` resolves `CHANGELOG.md` from the repository root and records the clone root (not `src/`) as `sourceDir`.
 - `update.ps1` looks for `src\install.ps1` and falls back to the pre-0.13.1 root location for existing install states.
 - **Upgrade note:** an existing Git clone install must run `.\src\install.ps1` once after pulling this change, because the 0.13.0 `quake-update` only looks for `install.ps1` at the clone root. ZIP installs are unaffected.
-- Updated the release workflow, `README.md`, `GEMINI.md` and `docs/BUGS_AND_GOTCHAS.md` §21 for the new layout.
+- Updated the release workflow, `README.md` and `docs/BUGS_AND_GOTCHAS.md` §21 for the new layout.
 - Bumped `VERSION` to `0.13.1`.
 
 ---
