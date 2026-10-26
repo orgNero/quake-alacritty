@@ -20,6 +20,10 @@ global g_FirstRun           := false
 global g_StartingDirectory  := "~"
 global g_AppVersion         := "unknown"
 
+; Terminal executable resolution (never launch a bare "alacritty.exe")
+global g_AlacrittyExe            := ""   ; resolved executable (session cache)
+global g_AlacrittyConfiguredPath := ""   ; optional [General] AlacrittyPath
+
 ; Layout settings
 global g_TileLayout         := "bottom"
 global g_TwoPaneLayout      := "side-by-side-visor"
@@ -69,6 +73,7 @@ global g_LastUpdateCheckSpawn  := 0
 LoadConfig()
 {
     global g_ConfigFile, g_BorderGap, g_BorderColor, g_VisorHeightPercent, g_MultiMonitorMode, g_ShowHelpOnStart, g_FirstRun, g_StartingDirectory
+    global g_AlacrittyConfiguredPath
     global g_TileLayout, g_TwoPaneLayout, g_KeyCycleLayout
     global g_KeyToggleVisor, g_KeySplit, g_KeyClose, g_KeyRetile
     global g_KeyFocusLeft, g_KeyFocusRight, g_KeyFocusUp, g_KeyFocusDown
@@ -111,6 +116,11 @@ LoadConfig()
 
         startDirVal := Trim(IniRead(g_ConfigFile, "General", "StartingDirectory", "~"))
         g_StartingDirectory := (startDirVal != "") ? startDirVal : "~"
+
+        ; Optional escape hatch for portable/custom Alacritty installs. It is
+        ; never written to config.ini by the installer, so the template stays
+        ; unchanged; an absent or invalid value simply falls back to PATH.
+        g_AlacrittyConfiguredPath := Trim(IniRead(g_ConfigFile, "General", "AlacrittyPath", ""))
     }
 
     ; 3. [Appearance]
@@ -1588,6 +1598,144 @@ GetStartingDirectory()
     return (userHome != "" && DirExist(userHome)) ? userHome : A_WorkingDir
 }
 
+; -------------------------------------------------------------
+; Terminal Executable Resolution
+; -------------------------------------------------------------
+; The installer can be started before Alacritty exists, so this process may
+; inherit a PATH that does not contain the newly installed directory yet. Never
+; launch a bare "alacritty.exe": resolve the real file once (optional config.ini
+; override -> PATH -> standard install locations), cache it for the session, and
+; re-resolve only after a launch actually fails.
+ResolveAlacrittyExecutable(force := false)
+{
+    global g_AlacrittyExe, g_AlacrittyConfiguredPath
+
+    if (!force && g_AlacrittyExe != "" && FileExist(g_AlacrittyExe))
+        return g_AlacrittyExe
+
+    ; 1. Explicit override: [General] AlacrittyPath in config.ini
+    candidate := ResolveAlacrittyFile(ExpandEnvVariables(g_AlacrittyConfiguredPath))
+    if (candidate != "")
+    {
+        g_AlacrittyExe := candidate
+        return candidate
+    }
+
+    ; 2. PATH inherited from this process (Explorer, Startup shortcut, terminal)
+    pathValue := EnvGet("PATH")
+    if (pathValue != "")
+    {
+        for dir in StrSplit(pathValue, ";")
+        {
+            dir := Trim(dir)
+            if (dir == "")
+                continue
+            if (SubStr(dir, 1, 1) == '"' && SubStr(dir, -1) == '"')
+                dir := SubStr(dir, 2, -1)
+            candidate := ResolveAlacrittyFile(dir . "\alacritty.exe")
+            if (candidate != "")
+            {
+                g_AlacrittyExe := candidate
+                return candidate
+            }
+        }
+    }
+
+    ; 3. Standard install locations (winget MSI and per-user installs)
+    standardDirs := []
+    localAppData := EnvGet("LOCALAPPDATA")
+    if (localAppData != "")
+        standardDirs.Push(localAppData . "\Programs\Alacritty")
+    programFiles := EnvGet("ProgramFiles")
+    if (programFiles != "")
+        standardDirs.Push(programFiles . "\Alacritty")
+    for dir in standardDirs
+    {
+        candidate := ResolveAlacrittyFile(dir . "\alacritty.exe")
+        if (candidate != "")
+        {
+            g_AlacrittyExe := candidate
+            return candidate
+        }
+    }
+
+    g_AlacrittyExe := ""
+    return ""
+}
+
+; Returns the path only for an existing file: directories, broken links and
+; empty values are rejected so a bad override cannot shadow a valid PATH hit.
+ResolveAlacrittyFile(candidate)
+{
+    if (candidate == "")
+        return ""
+    attr := FileExist(candidate)
+    if (attr == "" || InStr(attr, "D"))
+        return ""
+    return candidate
+}
+
+; Expands %VAR% references in a configured path.
+ExpandEnvVariables(value)
+{
+    if (value == "" || !InStr(value, "%"))
+        return value
+    size := DllCall("ExpandEnvironmentStrings", "Str", value, "Ptr", 0, "UInt", 0)
+    if (size <= 0)
+        return value
+    buf := Buffer(size * 2)
+    DllCall("ExpandEnvironmentStrings", "Str", value, "Ptr", buf, "UInt", size)
+    return StrGet(buf)
+}
+
+; Launches Alacritty with an optional argument suffix. Returns false after a
+; single re-resolve attempt and one clear dialog, instead of letting AutoHotkey
+; raise its generic "Failed attempt to launch program or document" error.
+LaunchAlacritty(args := "", workingDir := "")
+{
+    exePath := ResolveAlacrittyExecutable()
+    if (exePath != "" && TryRunAlacritty(exePath, args, workingDir))
+        return true
+
+    ; The cached path may be stale (removed, moved or reinstalled elsewhere).
+    exePath := ResolveAlacrittyExecutable(true)
+    if (exePath != "" && TryRunAlacritty(exePath, args, workingDir))
+        return true
+
+    ShowAlacrittyNotFoundMessage()
+    return false
+}
+
+TryRunAlacritty(exePath, args, workingDir)
+{
+    commandLine := '"' . exePath . '"'
+    if (args != "")
+        commandLine .= " " . args
+    try {
+        if (workingDir != "")
+            Run(commandLine, workingDir)
+        else
+            Run(commandLine)
+        return true
+    } catch {
+        return false
+    }
+}
+
+; Actionable replacement for the AHK crash dialog. One message covers the
+; first-run case (PATH not yet visible to this process), a missing install and
+; a moved portable install.
+ShowAlacrittyNotFoundMessage()
+{
+    global g_ConfigFile
+    configHint := (g_ConfigFile != "") ? g_ConfigFile : "%APPDATA%\alacritty\config.ini"
+    message := "Quake Alacritty could not find alacritty.exe.`n`n"
+    message .= "If Alacritty was installed moments ago, log out or restart Windows once so the updated PATH reaches AutoHotkey. After signing in, start Quake Alacritty again (the Startup shortcut does this automatically) and press the toggle hotkey. You do not need to re-run the installer.`n`n"
+    message .= "Otherwise install it with:`n    winget install -e --id Alacritty.Alacritty`n`n"
+    message .= "If Alacritty is installed in a custom folder, add this line to " . configHint . ":`n    AlacrittyPath=C:\full\path\to\alacritty.exe`nand reload the script."
+    MsgBox(message, "Quake Alacritty", "Icon!")
+}
+
 ; Helper: Launches an Alacritty process, injecting welcome cheat sheet if configured and shell is PowerShell
 LaunchTerminalProcess()
 {
@@ -1609,7 +1757,9 @@ LaunchTerminalProcess()
             if (welcomeScript != "")
             {
                 argFlag := (g_ShowHelpOnStart == "tip") ? " -TipOnly -Startup" : " -Startup"
-                Run(Format('alacritty.exe -e {1} -NoLogo -NoExit -ExecutionPolicy Bypass -File "{2}"{3}', configuredShell, welcomeScript, argFlag), startDir)
+                launchArgs := Format('-e {1} -NoLogo -NoExit -ExecutionPolicy Bypass -File "{2}"{3}', configuredShell, welcomeScript, argFlag)
+                if (!LaunchAlacritty(launchArgs, startDir))
+                    return false
 
                 if (g_ShowHelpOnStart == "first-run" && g_FirstRun)
                 {
@@ -1617,7 +1767,7 @@ LaunchTerminalProcess()
                     if (g_ConfigFile != "" && FileExist(g_ConfigFile))
                         try IniWrite("false", g_ConfigFile, "General", "FirstRun")
                 }
-                return
+                return true
             }
         }
     }
@@ -1626,7 +1776,10 @@ LaunchTerminalProcess()
     helpMode := shouldShowHelp ? ((g_ShowHelpOnStart == "first-run") ? "tip" : g_ShowHelpOnStart) : "none"
     EnvSet("QUAKE_SHOW_HELP", helpMode)
 
-    ; Clean first-run flag if first-run was triggered on a non-PowerShell shell
+    if (!LaunchAlacritty("", startDir))
+        return false
+
+    ; Clean first-run flag only after the terminal actually started
     if (g_FirstRun)
     {
         g_FirstRun := false
@@ -1634,7 +1787,7 @@ LaunchTerminalProcess()
             try IniWrite("false", g_ConfigFile, "General", "FirstRun")
     }
 
-    Run("alacritty.exe", startDir)
+    return true
 }
 
 ; Helper: Spawns the initial terminal window on target monitor (handling welcome banner if configured)
@@ -1643,7 +1796,8 @@ LaunchNewTerminal(targetMon)
     global g_MultiMonitorMode, g_MonitorWindows
     oldWindows := GetAlacrittyWindows()
 
-    LaunchTerminalProcess()
+    if (!LaunchTerminalProcess())
+        return
 
     firstHwnd := 0
     ; Adaptive polling: tile immediately once window appears (up to 1.5s cold start)
@@ -1982,7 +2136,8 @@ SpawnSplit()
     }
 
     allBefore := GetAlacrittyWindows()
-    LaunchTerminalProcess()
+    if (!LaunchTerminalProcess())
+        return
 
     newHwnd := 0
     ; Adaptive polling: tile immediately once new window appears (up to 750ms max)

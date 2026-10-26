@@ -177,10 +177,20 @@ function Test-QuakeNerdFontInstalled {
 }
 
 function Get-QuakeAlacrittyVersion {
-    $command = Get-Command alacritty -ErrorAction SilentlyContinue
-    if (-not $command) { return $null }
+    $executable = Get-QuakeAlacrittyExecutable
+    if (-not $executable) { return $null }
     try {
-        $output = & $command.Source --version 2>$null
+        # Alacritty is a GUI-subsystem executable: PowerShell's native call
+        # operator does not capture its stdout, so read the redirected pipe.
+        $startInfo = New-Object System.Diagnostics.ProcessStartInfo
+        $startInfo.FileName = $executable
+        $startInfo.Arguments = "--version"
+        $startInfo.RedirectStandardOutput = $true
+        $startInfo.UseShellExecute = $false
+        $startInfo.CreateNoWindow = $true
+        $process = [System.Diagnostics.Process]::Start($startInfo)
+        $output = $process.StandardOutput.ReadToEnd()
+        $process.WaitForExit()
         if ($output -match '(\d+\.\d+\.\d+)') { return $matches[1] }
     } catch { }
     return $null
@@ -450,8 +460,16 @@ if ($isUpgrade) {
 # -----------------------------------------------------------------------------
 # Step 1: Prerequisites Check & Installation
 # -----------------------------------------------------------------------------
-$alacrittyExe = (Get-Command alacritty -ErrorAction SilentlyContinue)
-$hasAlacritty = [bool]$alacrittyExe
+# Optional [General] AlacrittyPath override from an existing deployment or the
+# repository template (the installer never writes this key itself).
+$alacrittyConfigPath = Join-Path $TargetDir "config.ini"
+if (-not (Test-Path -LiteralPath $alacrittyConfigPath)) {
+    $alacrittyConfigPath = Join-Path $SourceDir "config.ini"
+}
+$configuredAlacrittyPath = Get-QuakeAlacrittyConfiguredPath -ConfigPath $alacrittyConfigPath
+
+$alacrittyPath = Get-QuakeAlacrittyExecutable -ConfiguredPath $configuredAlacrittyPath
+$hasAlacritty = [bool]$alacrittyPath
 $ahkExe = Get-QuakeAhkExecutable
 $hasAhk = [bool]$ahkExe
 $hasFont = Test-QuakeNerdFontInstalled
@@ -503,6 +521,22 @@ if ($InstallDependencies) {
         }
     }
 }
+
+# winget writes new install directories to PATH in the registry, never into this
+# already-running process. Rebuild PATH from the registry before probing again,
+# otherwise a fresh Alacritty stays "not found" for the rest of the session and
+# the AutoHotkey child inherits the same stale environment.
+if (-not $DryRun) {
+    Reset-QuakeProcessPath
+}
+
+# The pre-install probe is stale by definition on a fresh machine. Recompute the
+# dependency flags so status output, ARP registration and the final success
+# message all reflect what is actually on disk.
+$alacrittyPath = Get-QuakeAlacrittyExecutable -ConfiguredPath $configuredAlacrittyPath
+$hasAlacritty = [bool]$alacrittyPath
+$ahkExe = Get-QuakeAhkExecutable
+$hasAhk = [bool]$ahkExe
 
 if ($UpgradeDependencies) {
     Write-Host "`n⬆️  Dependency versions:" -ForegroundColor Yellow
@@ -1057,7 +1091,7 @@ if (-not $isDefaultTarget) {
     Write-Host "  [Skip] Symlink development deployments are not registered as installed apps" -ForegroundColor DarkGray
 } else {
     $displayIcon = $null
-    if ($alacrittyExe) { $displayIcon = "$($alacrittyExe.Source),0" }
+    if ($alacrittyPath) { $displayIcon = "$alacrittyPath,0" }
     elseif ($ahkExe) { $displayIcon = "$ahkExe,0" }
 
     Register-QuakeUninstallEntry -InstallDir $TargetDir -Version $AppVersion -DisplayIcon $displayIcon
@@ -1136,7 +1170,22 @@ if ($DryRun) {
         } else {
             "your configured ToggleVisor hotkey"
         }
-        Write-Host "  AutoHotkey visor is running! Press $toggleKeyDesc to toggle." -ForegroundColor Green
+
+        # Never claim success for a visor that cannot find its terminal. The
+        # same resolver order is used by quake_alacritty.ahk at launch time;
+        # re-read the override because -ResetConfig may have removed it.
+        $configuredAlacrittyPath = Get-QuakeAlacrittyConfiguredPath -ConfigPath $alacrittyConfigPath
+        $terminalPath = Get-QuakeAlacrittyExecutable -ConfiguredPath $configuredAlacrittyPath
+        if ($terminalPath) {
+            Write-Host "  AutoHotkey visor is running! Press $toggleKeyDesc to toggle." -ForegroundColor Green
+        } else {
+            Write-Host "  AutoHotkey is running, but Alacritty could not be found yet." -ForegroundColor Yellow
+            Write-Host "  Log out or restart Windows once so the updated PATH reaches AutoHotkey," -ForegroundColor Yellow
+            Write-Host "  then start the visor again (the Startup shortcut does this automatically)" -ForegroundColor Yellow
+            Write-Host "  and press $toggleKeyDesc. Re-running this installer is not required." -ForegroundColor Yellow
+            Write-Host "  If Alacritty is not installed at all: winget install -e --id Alacritty.Alacritty" -ForegroundColor DarkGray
+            Write-Host "  If Alacritty is installed in a custom folder, add AlacrittyPath=<full path to alacritty.exe> to $TargetDir\config.ini." -ForegroundColor DarkGray
+        }
     } else {
         Write-Host "  AutoHotkey executable not found in standard path. Please launch quake_alacritty.ahk manually." -ForegroundColor Red
     }

@@ -7,6 +7,37 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [Unreleased] - 2026-10-26
+
+## Features
+### Major
+_None_
+
+### Minor
+_None_
+
+## Fixes
+### Major
+- **First `Win + §` after a dependency-installing install:** The visor no longer fails with AutoHotkey's "Failed attempt to launch program or document: Action: <alacritty.exe>" dialog. `quake_alacritty.ahk` now resolves the real executable before every launch (optional `[General] AlacrittyPath` override → `PATH` → `%LOCALAPPDATA%\Programs\Alacritty` → `%ProgramFiles%\Alacritty`), caches it for the session, re-resolves once if a launch fails, and shows one actionable message instead of an unhandled error. Both the welcome/first-run command and normal splits use the resolver.
+- **Installer no longer reports a false success:** `install.ps1` rebuilds `$env:Path` from the Machine and User registry values after winget, re-probes Alacritty and AutoHotkey, and only prints "AutoHotkey visor is running!" when the terminal actually resolves. Otherwise it prints an explicit one-time log-out/restart instruction; re-running the installer is not required.
+
+### Minor
+- The first-run/welcome marker is only consumed after the terminal actually starts, so a failed first launch still shows the welcome tip next time.
+
+## Window Management & Multi-Monitor
+_None_
+
+## Styling & Appearance
+_None_
+
+## Configuration & Tooling
+- `quake_common.ps1`: added `Reset-QuakeProcessPath` (registry `PATH` rebuild with case-insensitive dedupe; session-only entries are kept last) and `Get-QuakeAlacrittyExecutable` (shared resolver mirroring the AutoHotkey search order). `Get-QuakeAlacrittyVersion` now uses it.
+- `install.ps1`: dependency probing, the ARP display icon and the final status message use the resolved executable instead of `Get-Command alacritty`; `PATH` is refreshed once after the winget block. `Get-QuakeAlacrittyVersion` now also reads Alacritty's redirected stdout, because PowerShell's call operator cannot capture `--version` from a GUI-subsystem executable.
+- `quake_alacritty.ahk`: added `ResolveAlacrittyExecutable`, `LaunchAlacritty` and a clear not-found dialog; no bare `Run("alacritty.exe")` remains.
+- `README.md`: documented the one-time log-out/restart case and the optional `AlacrittyPath` override.
+
+---
+
 ## [0.13.1] - 2026-10-26
 
 ## Features

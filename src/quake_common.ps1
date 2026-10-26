@@ -157,6 +157,115 @@ function Remove-QuakeUninstallEntry {
 # Dependency probing
 # -----------------------------------------------------------------------------
 
+# Rebuilds $env:Path from the Machine and User registry values. winget writes a
+# new install directory to the registry, not into an already-running process, so
+# a freshly installed Alacritty stays invisible for the rest of the session until
+# this runs. Registry entries come first (Machine, then User) and are deduped
+# case-insensitively; session-only entries are kept at the end so tools that are
+# available only in the current shell keep working.
+function Reset-QuakeProcessPath {
+    [CmdletBinding()]
+    param()
+
+    $sources = New-Object System.Collections.Generic.List[string]
+    foreach ($scope in @('Machine', 'User')) {
+        $raw = [Environment]::GetEnvironmentVariable('Path', $scope)
+        if (-not [string]::IsNullOrWhiteSpace($raw)) { $sources.Add($raw) }
+    }
+    if (-not [string]::IsNullOrWhiteSpace($env:Path)) { $sources.Add($env:Path) }
+
+    $entries = New-Object System.Collections.Generic.List[string]
+    $seen = @{}
+
+    foreach ($raw in $sources) {
+        foreach ($entry in ($raw -split ';')) {
+            $expanded = [Environment]::ExpandEnvironmentVariables($entry.Trim())
+            if ([string]::IsNullOrWhiteSpace($expanded)) { continue }
+            if ($seen.ContainsKey($expanded)) { continue }
+            $seen[$expanded] = $true
+            $entries.Add($expanded)
+        }
+    }
+
+    $env:Path = ($entries -join ';')
+}
+
+# Mirrors the runtime resolver in quake_alacritty.ahk: optional configured path ->
+# PATH -> standard install locations. The installer uses it to probe, to report
+# the Alacritty version and to decide whether the visor can actually launch a
+# terminal. It never assumes a single hard-coded directory.
+function Get-QuakeAlacrittyExecutable {
+    [CmdletBinding()]
+    param(
+        [string]$ConfiguredPath,
+        [switch]$RefreshPath
+    )
+
+    if ($RefreshPath) { Reset-QuakeProcessPath }
+
+    if (-not [string]::IsNullOrWhiteSpace($ConfiguredPath)) {
+        $expanded = [Environment]::ExpandEnvironmentVariables($ConfiguredPath.Trim())
+        if (Test-Path -LiteralPath $expanded -PathType Leaf) {
+            return (Resolve-Path -LiteralPath $expanded).Path
+        }
+    }
+
+    # Scan PATH ourselves instead of trusting Get-Command's discovery cache.
+    if (-not [string]::IsNullOrWhiteSpace($env:Path)) {
+        foreach ($entry in ($env:Path -split ';')) {
+            $directory = [Environment]::ExpandEnvironmentVariables($entry.Trim().Trim('"'))
+            if ([string]::IsNullOrWhiteSpace($directory)) { continue }
+            $candidate = Join-Path $directory "alacritty.exe"
+            if (Test-Path -LiteralPath $candidate -PathType Leaf) { return $candidate }
+        }
+    }
+
+    $candidates = @()
+    if ($env:LOCALAPPDATA) {
+        $candidates += (Join-Path $env:LOCALAPPDATA "Programs\Alacritty\alacritty.exe")
+    }
+    if ($env:ProgramFiles) {
+        $candidates += (Join-Path $env:ProgramFiles "Alacritty\alacritty.exe")
+    }
+    foreach ($candidate in $candidates) {
+        if (Test-Path -LiteralPath $candidate -PathType Leaf) { return $candidate }
+    }
+
+    return $null
+}
+
+# Reads the optional [General] AlacrittyPath override from a config.ini. This key
+# is intentionally absent from the shipped template; it only exists when a user
+# adds it for a portable/custom Alacritty location.
+function Get-QuakeAlacrittyConfiguredPath {
+    [CmdletBinding()]
+    param([string]$ConfigPath)
+
+    if ([string]::IsNullOrWhiteSpace($ConfigPath) -or -not (Test-Path -LiteralPath $ConfigPath -PathType Leaf)) {
+        return $null
+    }
+
+    $inGeneral = $false
+    try {
+        foreach ($line in (Get-Content -LiteralPath $ConfigPath -ErrorAction Stop)) {
+            if ($line -match '^\s*\[([^\]]+)\]') {
+                $inGeneral = ($matches[1].Trim() -ieq 'General')
+                continue
+            }
+            if (-not $inGeneral) { continue }
+            if ($line -match '^\s*([^=;#\s\[][^=]*?)\s*=\s*(.*)$') {
+                if ($matches[1].Trim() -ieq 'AlacrittyPath') {
+                    $value = $matches[2].Trim()
+                    if ($value -ne '') { return $value }
+                }
+            }
+        }
+    } catch {
+        Write-Verbose "Could not read $ConfigPath`: $_"
+    }
+    return $null
+}
+
 function Get-QuakeAhkExecutable {
     [CmdletBinding()]
     param()
