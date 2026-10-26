@@ -32,7 +32,7 @@ _None_
 
 ## Configuration & Tooling
 - `quake_common.ps1`: added `Reset-QuakeProcessPath` (registry `PATH` rebuild with case-insensitive dedupe; session-only entries are kept last) and `Get-QuakeAlacrittyExecutable` (shared resolver mirroring the AutoHotkey search order). `Get-QuakeAlacrittyVersion` now uses it.
-- `install.ps1`: dependency probing, the ARP display icon and the final status message use the resolved executable instead of `Get-Command alacritty`; `PATH` is refreshed once after the winget block.
+- `install.ps1`: dependency probing, the ARP display icon and the final status message use the resolved executable instead of `Get-Command alacritty`; `PATH` is refreshed once after the winget block. `Get-QuakeAlacrittyVersion` now also reads Alacritty's redirected stdout, because PowerShell's call operator cannot capture `--version` from a GUI-subsystem executable.
 - `quake_alacritty.ahk`: added `ResolveAlacrittyExecutable`, `LaunchAlacritty` and a clear not-found dialog; no bare `Run("alacritty.exe")` remains.
 - `README.md`: documented the one-time log-out/restart case and the optional `AlacrittyPath` override.
 

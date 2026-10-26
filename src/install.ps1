@@ -180,7 +180,17 @@ function Get-QuakeAlacrittyVersion {
     $executable = Get-QuakeAlacrittyExecutable
     if (-not $executable) { return $null }
     try {
-        $output = & $executable --version 2>$null
+        # Alacritty is a GUI-subsystem executable: PowerShell's native call
+        # operator does not capture its stdout, so read the redirected pipe.
+        $startInfo = New-Object System.Diagnostics.ProcessStartInfo
+        $startInfo.FileName = $executable
+        $startInfo.Arguments = "--version"
+        $startInfo.RedirectStandardOutput = $true
+        $startInfo.UseShellExecute = $false
+        $startInfo.CreateNoWindow = $true
+        $process = [System.Diagnostics.Process]::Start($startInfo)
+        $output = $process.StandardOutput.ReadToEnd()
+        $process.WaitForExit()
         if ($output -match '(\d+\.\d+\.\d+)') { return $matches[1] }
     } catch { }
     return $null
