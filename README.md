@@ -9,12 +9,6 @@ Features mouse-aware multi-monitor detection, dynamic 2×2 quad grid tiling, acr
 
 ---
 
-## 📸 Preview
-
-![Quake Alacritty Demo](https://github.com/orgNero/quake-alacritty/raw/main/assets/quake_alacritty_preview.gif)
-
----
-
 ## 🚀 Key Features
 
 * **Independent Per-Monitor Terminal Workspaces (`Win + §`):**
