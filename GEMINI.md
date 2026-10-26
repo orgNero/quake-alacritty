@@ -13,13 +13,16 @@ Key capabilities:
 ---
 
 ## 2. Key Architecture & File Structure
-- `quake_alacritty.ahk`: Core AutoHotkey v2 script managing hotkeys (`Win + §`, `Alt + Enter`, `Alt + W`, `Alt + R`, `Alt + Arrows`), monitor resolution and mouse cursor detection, window positioning/tiling, and transparent cyan seam overlay GUIs.
-- `alacritty.toml`: Alacritty terminal styling, font definitions (JetBrainsMono Nerd Font), window opacity (`0.70`), and Windows 11 acrylic blur settings.
-- `install.ps1`: Idempotent installer/upgrader (install-state detection, config merge/backup policy, dependency install/upgrade, ARP registration, `-DryRun`, `-CheckForUpdates`, `-VerifyVersion`).
-- `uninstall.ps1`: Dedicated uninstaller (graceful teardown, startup shortcut, profile hooks, HKCU uninstall entry, install metadata cleanup).
-- `quake_common.ps1`: Shared installer helpers dot-sourced by both PowerShell scripts (version/install-state, `Win32_Process` detection, `WM_CLOSE` teardown, INI merge).
-- `VERSION` / `CONFIG_SCHEMA`: One-line source of truth for the app version and `config.ini` schema; deployed to `%APPDATA%\alacritty` and read by AutoHotkey at runtime.
+- `Install.cmd`: Root-level launcher that forwards to `src\install.ps1`; contains no install logic.
+- `src/quake_alacritty.ahk`: Core AutoHotkey v2 script managing hotkeys (`Win + §`, `Alt + Enter`, `Alt + W`, `Alt + R`, `Alt + Arrows`), monitor resolution and mouse cursor detection, window positioning/tiling, and transparent cyan seam overlay GUIs.
+- `src/alacritty.toml`: Alacritty terminal styling, font definitions (JetBrainsMono Nerd Font), window opacity (`0.70`), and Windows 11 acrylic blur settings.
+- `src/install.ps1`: Idempotent installer/upgrader (install-state detection, config merge/backup policy, dependency install/upgrade, ARP registration, `-DryRun`, `-CheckForUpdates`, `-VerifyVersion`).
+- `src/uninstall.ps1`: Dedicated uninstaller (graceful teardown, startup shortcut, profile hooks, HKCU uninstall entry, install metadata cleanup).
+- `src/quake_common.ps1`: Shared installer helpers dot-sourced by both PowerShell scripts (version/install-state, `Win32_Process` detection, `WM_CLOSE` teardown, INI merge).
+- `src/VERSION` / `src/CONFIG_SCHEMA`: One-line source of truth for the app version and `config.ini` schema; deployed to `%APPDATA%\alacritty` and read by AutoHotkey at runtime.
 - `README.md`: Public user documentation, feature showcase, shortcut cheatsheet, and quick start guide.
+
+All runtime scripts, templates and version markers live in `src/`; the release ZIP mirrors that layout, while deployment flattens them into `%APPDATA%\alacritty`.
 
 ---
 
@@ -35,7 +38,7 @@ Items that the user wants added to project documentation, ideas, or feature back
 When discussing, proposing, or adding items to the backlog, strictly adhere to the following rules:
 
 1. **Deduplication Check**:
-   - Always first check whether the feature or idea has already been brought up in `quake-alacritty - backlog.md`, documented in `README.md`, or already implemented in `quake_alacritty.ahk`, `alacritty.toml`, or `install.ps1`.
+   - Always first check whether the feature or idea has already been brought up in `quake-alacritty - backlog.md`, documented in `README.md`, or already implemented in `src/quake_alacritty.ahk`, `src/alacritty.toml`, or `src/install.ps1`.
    - Inform the user if it exists or is already implemented rather than duplicating it.
 
 2. **Question Feasibility & Usability (Pressure-Testing)**:

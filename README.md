@@ -76,7 +76,7 @@ Features mouse-aware multi-monitor detection, dynamic 2×2 quad grid tiling, acr
 
 > [!TIP]
 > **No dependencies required beforehand!**
-> You do **not** need to install any prerequisites before running the automated installer. The setup script (`.\install.ps1`) automatically inspects your machine, detects if Alacritty, AutoHotkey v2, or JetBrainsMono Nerd Font are missing, and offers to install them for you via `winget`.
+> You do **not** need to install any prerequisites before running the automated installer. The setup script (`.\src\install.ps1`) automatically inspects your machine, detects if Alacritty, AutoHotkey v2, or JetBrainsMono Nerd Font are missing, and offers to install them for you via `winget`.
 >
 > Only run the manual commands below if you prefer installing dependencies yourself or are performing a manual setup (Option B).
 
@@ -103,9 +103,9 @@ No Git, no clone, no developer tools:
 
 1. Open **[Releases](https://github.com/orgNero/quake-alacritty/releases/latest)** and download `quake-alacritty-vX.Y.Z.zip`.
 2. Extract the **whole** archive to a folder of your choice (keep every file together).
-3. Double-click **`Install.cmd`**. It forwards to `install.ps1` with `-ExecutionPolicy Bypass` (process-scoped only) and keeps the window open if something fails.
+3. Double-click **`Install.cmd`**. It forwards to `src\install.ps1` with `-ExecutionPolicy Bypass` (process-scoped only) and keeps the window open if something fails.
 
-`Install.cmd` contains no install logic of its own; everything is still owned by `install.ps1`, so ZIP installs and clone installs behave identically. To pass flags, run it from a terminal:
+`Install.cmd` contains no install logic of its own; everything is still owned by `src\install.ps1`, so ZIP installs and clone installs behave identically. To pass flags, run it from a terminal:
 
 ```bat
 Install.cmd -Shell wsl -KeyboardLayout us -InstallDependencies -CreateStartupShortcut
@@ -128,14 +128,16 @@ Run PowerShell from inside the repository folder:
 
 ```powershell
 # Interactive setup wizard (prompts for shell, keyboard layout, dependencies & startup)
-.\install.ps1
+.\src\install.ps1
 
 # If script execution is blocked in your session:
-powershell -NoProfile -ExecutionPolicy Bypass -File .\install.ps1
+powershell -NoProfile -ExecutionPolicy Bypass -File .\src\install.ps1
 
 # Or run headless / unattended with explicit options:
-.\install.ps1 -Shell wsl -KeyboardLayout us -InstallDependencies -CreateStartupShortcut
+.\src\install.ps1 -Shell wsl -KeyboardLayout us -InstallDependencies -CreateStartupShortcut
 ```
+
+The runtime scripts, templates and version markers live in `src/`; only `Install.cmd`, `README.md` and repository metadata stay at the root. The release ZIP mirrors that layout, so the same relative paths work in both places.
 
 The setup wizard guides you through:
 1. **Prerequisite Check**: Automatically detects if Alacritty, AutoHotkey v2, or JetBrainsMono Nerd Font are missing and offers to install them via `winget`.
@@ -186,10 +188,10 @@ quake-update --check    # Git Bash: report only, change nothing
 - **The check reads published releases, not `main`.** A tag that has no GitHub release is never advertised, and the 60-requests-per-hour unauthenticated API limit is ample for a once-a-day check. If GitHub cannot be reached, the previous cached result is kept and the check retries later; failures never block terminal startup.
 - **Your current shell keeps the old functions** until you open a new terminal pane. The update itself runs a child installer, so the running command is never replaced mid-flight.
 
-Manual fallback: for a clone, `git pull` followed by `.\install.ps1`; for a ZIP, download the newer release and run its `Install.cmd`.
+Manual fallback: for a clone, `git pull` followed by `.\src\install.ps1`; for a ZIP, download the newer release and run its `Install.cmd`.
 
 ### Option C: Manual Setup
-1. Copy `alacritty.toml`, `quake_alacritty.ahk`, `config.ini`, `welcome.ps1`, `quake_common.ps1`, `update.ps1`, `update-check.ps1`, `uninstall.ps1`, `VERSION`, and `CONFIG_SCHEMA` to your configuration folder:
+1. Copy the runtime files from `src\` (`alacritty.toml`, `quake_alacritty.ahk`, `config.ini`, `welcome.ps1`, `quake_common.ps1`, `update.ps1`, `update-check.ps1`, `uninstall.ps1`, `VERSION`, and `CONFIG_SCHEMA`) to your configuration folder:
    ```
    C:\Users\<YourUsername>\AppData\Roaming\alacritty\
    ```
@@ -205,7 +207,7 @@ Quake Alacritty uses a clean separation of concerns:
 - **`alacritty.toml`**: Governs terminal styling, font definitions, opacity, and Windows 11 acrylic blur.
 
 ### Configuration File (`config.ini`)
-Located at `%APPDATA%\alacritty\config.ini` (or the repository root):
+Located at `%APPDATA%\alacritty\config.ini` (or `src\config.ini` in the repository):
 
 ```ini
 [General]
@@ -279,7 +281,7 @@ ReloadScript=!^r
 > After saving changes in `config.ini`, press **`Alt + Ctrl + R`** while inside Alacritty to instantly reload settings without restarting the terminal!
 
 ### Adjusting Opacity & Blur
-Edit [`alacritty.toml`](alacritty.toml):
+Edit [`alacritty.toml`](src/alacritty.toml):
 ```toml
 [window]
 opacity = 0.70    # 0.0 is completely transparent, 1.0 is solid
@@ -288,7 +290,7 @@ decorations = "None"
 ```
 
 ### Configuring Your Shell (PowerShell, WSL Bash, Git Bash)
-Quake Alacritty natively supports any Windows shell inside Alacritty without forcing PowerShell wrappers. You can change your shell anytime in [`alacritty.toml`](alacritty.toml):
+Quake Alacritty natively supports any Windows shell inside Alacritty without forcing PowerShell wrappers. You can change your shell anytime in [`alacritty.toml`](src/alacritty.toml):
 
 **WSL Bash (Ubuntu / Linux):**
 ```toml
@@ -318,7 +320,7 @@ To cleanly remove Quake Alacritty, run the uninstaller:
 
 ```powershell
 # From the repository:
-.\uninstall.ps1
+.\src\uninstall.ps1
 
 # Or from your AppData installation folder:
 powershell -ExecutionPolicy Bypass -File "$env:APPDATA\alacritty\uninstall.ps1"
@@ -336,11 +338,11 @@ The uninstaller:
 ## 🩺 Troubleshooting
 
 **`Install.cmd` closes immediately or does nothing**
-- Extract the **whole** ZIP first; `Install.cmd` refuses to run when `install.ps1` is not next to it.
+- Extract the **whole** ZIP first; `Install.cmd` refuses to run when `src\install.ps1` is missing.
 - Run it from a terminal (or `cmd /k Install.cmd`) so the error stays visible.
 - If `.cmd` files are blocked by policy, use PowerShell directly:
   ```powershell
-  powershell -NoProfile -ExecutionPolicy Bypass -File .\install.ps1
+  powershell -NoProfile -ExecutionPolicy Bypass -File .\src\install.ps1
   ```
   `-ExecutionPolicy Bypass` applies to that process only; it does not change machine or user policy.
 
@@ -369,7 +371,7 @@ The uninstaller:
 - **`%APPDATA%\alacritty\.update-check.json`** — cached result of the throttled background update check (`installedVersion`, `latestVersion`, `checkedAtUtc`, `nextCheckAtUtc`, `lastError`). Read by the terminal notice; never used as a version source of truth.
 - **`%APPDATA%\alacritty\.update-notice`** — the local date (`yyyyMMdd`) of the last automatic update notice, so it shows at most once per day. Written only by the startup path.
 - The AutoHotkey tray tooltip/menu and the `quake-help` cheat sheet read `VERSION` at runtime instead of embedding constants.
-- Run `.\install.ps1 -VerifyVersion` to assert that `VERSION` and the newest `CHANGELOG.md` heading agree (and the nearest git tag, once tags exist).
+- Run `.\src\install.ps1 -VerifyVersion` to assert that `VERSION` and the newest `CHANGELOG.md` heading agree (and the nearest git tag, once tags exist).
 
 ---
 
