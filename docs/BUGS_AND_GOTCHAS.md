@@ -420,7 +420,7 @@ With symbolic links in place, `A_ScriptFullPath` resolves directly to the reposi
 ## 20. Release Workflow, ZIP Packaging and the Releases API
 
 ### Symptom
-- The released ZIP contains a `staging\` folder instead of the scripts at the archive root, so `Install.cmd` cannot find `install.ps1`.
+- The released ZIP contains a `staging\` folder instead of the expected root/`src\` layout, so `Install.cmd` cannot find `src\install.ps1`.
 - `Install.cmd` fails with garbled labels or `goto`/block errors after checkout.
 - The update check advertises a version that has a tag but no GitHub release, or breaks with a raw HTTP error when no release exists yet.
 - A release is published whose tag, `VERSION` and `CHANGELOG.md` disagree.
