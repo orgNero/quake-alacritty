@@ -1181,7 +1181,8 @@ if ($DryRun) {
         } else {
             Write-Host "  AutoHotkey is running, but Alacritty could not be found yet." -ForegroundColor Yellow
             Write-Host "  Log out or restart Windows once so the updated PATH reaches AutoHotkey," -ForegroundColor Yellow
-            Write-Host "  then press $toggleKeyDesc. Re-running this installer is not required." -ForegroundColor Yellow
+            Write-Host "  then start the visor again (the Startup shortcut does this automatically)" -ForegroundColor Yellow
+            Write-Host "  and press $toggleKeyDesc. Re-running this installer is not required." -ForegroundColor Yellow
             Write-Host "  If Alacritty is not installed at all: winget install -e --id Alacritty.Alacritty" -ForegroundColor DarkGray
             Write-Host "  If Alacritty is installed in a custom folder, add AlacrittyPath=<full path to alacritty.exe> to $TargetDir\config.ini." -ForegroundColor DarkGray
         }

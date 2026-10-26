@@ -112,7 +112,7 @@ Install.cmd -Shell wsl -KeyboardLayout us -InstallDependencies -CreateStartupSho
 > **Zero setup required beforehand:** Running the installer works immediately on a fresh Windows 11 machine without needing any pre-installed software—it will automatically detect, prompt for, and install all missing dependencies for you.
 
 > [!NOTE]
-> **First install that had to add Alacritty:** Windows only publishes new `PATH` entries to programs started afterwards. The installer refreshes its own environment and launches the visor with it, and the visor also checks the standard Alacritty folders, so the default `winget` install normally works right away. If `Win + §` still reports that Alacritty cannot be found, log out and back in (or restart) once, then press the shortcut again. Re-running the installer after the reboot is **not** needed.
+> **First install that had to add Alacritty:** Windows only publishes new `PATH` entries to programs started afterwards. The installer refreshes its own environment and launches the visor with it, and the visor also checks the standard Alacritty folders, so the default `winget` install normally works right away. If `Win + §` still reports that Alacritty cannot be found, log out and back in (or restart) once. At sign-in the Startup shortcut relaunches Quake Alacritty automatically; if you skipped it, start `quake_alacritty.ahk` again, then press the shortcut. Re-running the installer after the reboot is **not** needed.
 
 ### Option B: From a Git Clone (Development)
 
@@ -369,7 +369,7 @@ The uninstaller:
 
 **The first `Win + §` says Alacritty cannot be found**
 - This only affects the session in which the installer itself installed Alacritty: the already-running installer and its AutoHotkey child keep the `PATH` they inherited before Alacritty existed. The installer now refreshes `PATH` from the registry and the visor also checks `%LOCALAPPDATA%\Programs\Alacritty` and `%ProgramFiles%\Alacritty`, so a default `winget` install normally opens on the first press.
-- If it still cannot find the executable, log out or restart Windows once so the updated `PATH` reaches every process, then press the shortcut again. **Do not re-run the installer**; nothing else needs to change.
+- If it still cannot find the executable, log out or restart Windows once so the updated `PATH` reaches every process. Start Quake Alacritty again at sign-in (the Startup shortcut does this automatically; otherwise launch `quake_alacritty.ahk`), then press the shortcut again. **Do not re-run the installer**; nothing else needs to change.
 - Alacritty in a custom or portable folder? Add the optional override under `[General]` in `%APPDATA%\alacritty\config.ini`, then reload with `Alt + Ctrl + R`:
   ```ini
   [General]

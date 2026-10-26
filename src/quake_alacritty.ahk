@@ -1730,7 +1730,7 @@ ShowAlacrittyNotFoundMessage()
     global g_ConfigFile
     configHint := (g_ConfigFile != "") ? g_ConfigFile : "%APPDATA%\alacritty\config.ini"
     message := "Quake Alacritty could not find alacritty.exe.`n`n"
-    message .= "If Alacritty was installed moments ago, log out or restart Windows once so the updated PATH reaches AutoHotkey, then press the toggle hotkey again. You do not need to re-run the installer.`n`n"
+    message .= "If Alacritty was installed moments ago, log out or restart Windows once so the updated PATH reaches AutoHotkey. After signing in, start Quake Alacritty again (the Startup shortcut does this automatically) and press the toggle hotkey. You do not need to re-run the installer.`n`n"
     message .= "Otherwise install it with:`n    winget install -e --id Alacritty.Alacritty`n`n"
     message .= "If Alacritty is installed in a custom folder, add this line to " . configHint . ":`n    AlacrittyPath=C:\full\path\to\alacritty.exe`nand reload the script."
     MsgBox(message, "Quake Alacritty", "Icon!")
