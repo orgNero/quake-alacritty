@@ -1,0 +1,161 @@
+name: Release
+
+# Only real version tags may build a release. Ad-hoc tags, branches and manual
+# dispatches are rejected by the first step instead of silently producing an
+# archive with the wrong version metadata.
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Validate tag format
+        shell: pwsh
+        run: |
+          $tag = "${{ github.ref_name }}"
+          if ($tag -notmatch '^v\d+\.\d+\.\d+$') {
+            Write-Error "Refusing to build from tag '$tag': expected vX.Y.Z."
+            exit 1
+          }
+
+      - name: Assert version metadata
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $tagVersion = "${{ github.ref_name }}".TrimStart('v')
+
+          $version = (Get-Content -Path ./VERSION -Raw).Trim()
+          if ($version -ne $tagVersion) {
+            Write-Error "VERSION ($version) does not match tag ($tagVersion)."
+            exit 1
+          }
+
+          & ./install.ps1 -VerifyVersion
+          if ($LASTEXITCODE -ne 0) {
+            Write-Error "install.ps1 -VerifyVersion failed."
+            exit 1
+          }
+
+          $changelog = Get-Content -Path ./CHANGELOG.md -Raw
+          if ($changelog -notmatch '(?m)^##\s*\[(\d+\.\d+\.\d+)\]\s*-\s*(\d{4}-\d{2}-\d{2})') {
+            Write-Error "CHANGELOG.md has no dated '## [x.y.z] - yyyy-mm-dd' heading."
+            exit 1
+          }
+          $headingVersion = $matches[1]
+          $headingDate = [datetime]::ParseExact($matches[2], 'yyyy-MM-dd', $null)
+          if ($headingVersion -ne $tagVersion) {
+            Write-Error "Newest CHANGELOG.md heading ($headingVersion) does not match tag ($tagVersion)."
+            exit 1
+          }
+          if ($headingDate.Date -gt (Get-Date).Date) {
+            Write-Error "Newest CHANGELOG.md heading date ($headingDate) is in the future."
+            exit 1
+          }
+
+      - name: Build distribution ZIP
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $files = @(
+            'quake_alacritty.ahk',
+            'alacritty.toml',
+            'config.ini',
+            'welcome.ps1',
+            'install.ps1',
+            'uninstall.ps1',
+            'quake_common.ps1',
+            'update.ps1',
+            'update-check.ps1',
+            'Install.cmd',
+            'VERSION',
+            'CONFIG_SCHEMA',
+            'README.md',
+            'LICENSE'
+          )
+
+          $staging = Join-Path $env:RUNNER_TEMP 'staging'
+          if (Test-Path $staging) { Remove-Item $staging -Recurse -Force }
+          New-Item -ItemType Directory -Path $staging -Force | Out-Null
+
+          foreach ($file in $files) {
+            if (-not (Test-Path $file)) {
+              Write-Error "Distribution file is missing: $file"
+              exit 1
+            }
+            Copy-Item -Path $file -Destination $staging -Force
+          }
+
+          $version = (Get-Content -Path ./VERSION -Raw).Trim()
+          $zipName = "quake-alacritty-v$version.zip"
+          Compress-Archive -Path (Join-Path $staging '*') -DestinationPath $zipName -Force
+
+          if (-not (Test-Path $zipName)) {
+            Write-Error "ZIP was not created: $zipName"
+            exit 1
+          }
+
+          $extracted = Join-Path $env:RUNNER_TEMP 'verify-zip'
+          if (Test-Path $extracted) { Remove-Item $extracted -Recurse -Force }
+          Expand-Archive -Path $zipName -DestinationPath $extracted -Force
+          foreach ($file in $files) {
+            if (-not (Test-Path (Join-Path $extracted $file))) {
+              Write-Error "ZIP is missing $file"
+              exit 1
+            }
+          }
+          Write-Host "Built $zipName with $($files.Count) files."
+
+      - name: Extract CHANGELOG release notes
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $version = (Get-Content -Path ./VERSION -Raw).Trim()
+          $changelog = Get-Content -Path ./CHANGELOG.md -Raw
+
+          $pattern = "(?ms)^##\s*\[" + [regex]::Escape($version) + "\][^\r\n]*\r?\n(.*?)(?=^##\s*\[|\z)"
+          $match = [regex]::Match($changelog, $pattern)
+          if (-not $match.Success) {
+            Write-Error "Could not find a '## [$version]' block in CHANGELOG.md."
+            exit 1
+          }
+          $notes = $match.Value.TrimEnd()
+
+          # Previous published tag, newest first. Never invent one.
+          $allTags = @(& git tag --list 'v*' --sort=-v:refname)
+          $previous = $allTags | Where-Object { $_ -ne "v$version" } | Select-Object -First 1
+          if ($previous) {
+            $notes += "`r`n`r`n**Full changelog:** $env:GITHUB_SERVER_URL/$env:GITHUB_REPOSITORY/compare/$previous...v$version"
+          }
+
+          $notesPath = Join-Path $PWD 'release-notes.md'
+          [System.IO.File]::WriteAllText($notesPath, $notes + "`r`n", (New-Object System.Text.UTF8Encoding($false)))
+          Write-Host "Wrote release-notes.md (previous tag: $previous)."
+
+      - name: Publish GitHub release
+        shell: powershell
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $version = (Get-Content -Path ./VERSION -Raw).Trim()
+          $zipName = "quake-alacritty-v$version.zip"
+          if (-not (Test-Path $zipName)) {
+            Write-Error "Release asset is missing: $zipName"
+            exit 1
+          }
+          gh release create "v$version" "$zipName" --title "v$version" --notes-file release-notes.md --verify-tag
+          if ($LASTEXITCODE -ne 0) {
+            Write-Error "gh release create failed with exit code $LASTEXITCODE."
+            exit 1
+          }

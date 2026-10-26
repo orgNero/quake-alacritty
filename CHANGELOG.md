@@ -7,6 +7,44 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.13.0] - 2026-10-26
+
+## Features
+### Major
+- **Background Update Check with Cached Notice**: `quake_alacritty.ahk` silently spawns `update-check.ps1` when the visor starts or is toggled, comparing the deployed `VERSION` with the newest published GitHub release. Results are cached in `%APPDATA%\alacritty\.update-check.json` and throttled to once per day after success (once per hour after a failure). The check is advisory only: nothing is downloaded, extracted or executed, and the terminal launch path never touches the network.
+- **One-Word Update (`quake-update`)**: A new `update.ps1` plus `quake-update` shell command (PowerShell `$PROFILE` and Git Bash `~/.bashrc`) updates a Git clone with a fast-forward-only pull followed by the freshly pulled installer, and points ZIP installs at the release page because there is nothing to pull. `quake-update --check` (`-Check` in PowerShell) reports only. Dirty trees, detached HEADs, missing upstreams and missing Git stop with a plain message; nothing is stashed, reset or discarded.
+- **Once-a-Day In-Terminal Notice**: `welcome.ps1` renders a single line from the local cache at startup — `⬆ Update available: vX (you have vY). Type 'quake-update'.` — at most once per calendar day and only when the cached release is newer than the deployed `VERSION`. Git Bash receives the same notice through the startup hook. Manual `quake-help` shows the line without consuming the daily marker; `QUAKE_SHOW_HELP=none` suppresses it.
+- **Published Releases & Downloadable ZIP**: A new `.github/workflows/release.yml` runs on every `vX.Y.Z` tag, asserts that the tag, `VERSION` and newest `CHANGELOG.md` heading agree (and that the heading date is not in the future), builds `quake-alacritty-vX.Y.Z.zip` from an explicit script-only file list, and publishes a GitHub release whose notes are extracted verbatim from `CHANGELOG.md` with a compare link to the previous tag. `Install.cmd` gives ZIP users a double-click launcher that forwards flags to `install.ps1` and keeps the window open only on failure.
+- **Release-Based Update Checks**: `install.ps1 -CheckForUpdates`, `update.ps1` and the background cache now read `https://api.github.com/repos/orgNero/quake-alacritty/releases/latest` instead of the tip of `main`. A tag without a published release is never advertised, and an empty release list reports "No published release found yet." instead of falling back to in-progress branch code.
+
+### Minor
+- `quake-update` reports the new version after a successful repo update and reminds the user to toggle the visor to retile.
+- The installer records `sourceType` (`repo` or `zip`) and `sourceDir` in `.install-state.json` so the updater knows which path applies.
+- `uninstall.ps1` removes the update cache, the once-a-day notice marker and the update scripts alongside the other deployed artifacts.
+
+## Fixes
+### Major
+- _None_
+
+### Minor
+- A failed update check now keeps the last known release version in the cache while recording a short `lastError`, so a transient offline period does not erase an already-known update.
+
+## Window Management & Multi-Monitor
+_None_
+
+## Styling & Appearance
+_None_
+
+## Configuration & Tooling
+- Bumped `VERSION` to `0.13.0`.
+- Added `update-check.ps1`, `update.ps1` and the shared `Invoke-QuakeUpdateCheck` implementation in `quake_common.ps1`; `install.ps1`, the background checker and the updater share one result shape and one compare helper.
+- Added `.github/workflows/release.yml`, which uses only `actions/checkout` plus the runner's preinstalled `gh`.
+- Added `*.cmd text eol=crlf` to `.gitattributes` so `Install.cmd` keeps CRLF in the repository, on Windows checkouts and inside the release ZIP.
+- Documented the ZIP quick start, `quake-update`, the startup notice, the new update-check source, Mark-of-the-Web/SmartScreen behavior and the required `-ExecutionPolicy Bypass` invocation in `README.md`.
+- Recorded the release/ZIP and update-API traps in `docs/BUGS_AND_GOTCHAS.md`.
+
+---
+
 ## [0.12.1] - 2026-10-25
 
 ## Features

@@ -13,6 +13,9 @@
 *.yml   text
 *.json  text
 
+# Batch launchers must keep CRLF or cmd.exe misreads labels/blocks
+*.cmd   text eol=crlf
+
 # Single-line metadata markers
 VERSION        text
 CONFIG_SCHEMA  text

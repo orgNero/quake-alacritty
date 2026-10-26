@@ -11,7 +11,7 @@ Features mouse-aware multi-monitor detection, dynamic 2×2 quad grid tiling, acr
 
 ## 📸 Preview
 
-![Quake Alacritty Demo](assets/quake_alacritty_preview.gif)
+![Quake Alacritty Demo](https://github.com/orgNero/quake-alacritty/raw/main/assets/quake_alacritty_preview.gif)
 
 ---
 
@@ -46,7 +46,7 @@ Features mouse-aware multi-monitor detection, dynamic 2×2 quad grid tiling, acr
 * **Window Swapping & Rotation (`Alt + Shift + Arrows`, `Alt + Shift + Space`):** Rearrange panes on the fly by swapping with adjacent windows or rotating all positions cyclically without losing keyboard focus.
 * **In-Terminal Startup Help Hint & Cheat Sheet (`quake-help`, `quake-env`):** Displays a sleek 1-line reminder (`💡 Tip: Type 'quake-help' to view keyboard shortcuts`) on every terminal start. Configurable via `ShowHelpOnStart=tip` in `config.ini` (`tip` for sleek 1-line hint, `banner` for full 20-line table, `none` for silent startup). Running `quake-help` displays the full electric cyan quickstart cheat sheet on demand anytime, while `quake-env` inspects your setup (OS, AutoHotkey, Alacritty, displays) and copies formatted Markdown to the clipboard for rapid bug reporting.
 * **One-Word Updates (`quake-update`):** `quake-update` checks for a newer release and upgrades a Git clone in place (fast-forward pull + installer). ZIP installs are pointed at the download page instead. `quake-update --check` (`-Check` in PowerShell) reports the version without changing anything.
-* **Once-a-Day Update Notice:** When the cached background check has seen a newer published release, terminal startup prints a single line — `⬆ Update available: v0.13.0 (you have v0.12.1). Type 'quake-update'.` — at most once per calendar day. The line comes from the local cache only (no network on launch), `quake-help` shows it while an update is pending, and `QUAKE_SHOW_HELP=none` suppresses startup messages.
+* **Once-a-Day Update Notice:** When the cached background check has seen a newer published release, terminal startup prints a single line — `⬆ Update available: vX (you have vY). Type 'quake-update'.` — at most once per calendar day. The line comes from the local cache only (no network on launch), `quake-help` shows it while an update is pending, and `QUAKE_SHOW_HELP=none` suppresses startup messages.
 * **Taskbar Awareness:** Respects custom work areas (such as left-docked taskbars) using `MonitorGetWorkArea`.
 
 ---
@@ -97,16 +97,41 @@ winget install -e --id DEVCOM.JetBrainsMonoNerdFont
 
 ## ⚡ Quick Start
 
-### Option A: Using the Automated Install Script (Recommended)
+### Option A: Download the Latest Release (Recommended)
+
+No Git, no clone, no developer tools:
+
+1. Open **[Releases](https://github.com/orgNero/quake-alacritty/releases/latest)** and download `quake-alacritty-vX.Y.Z.zip`.
+2. Extract the **whole** archive to a folder of your choice (keep every file together).
+3. Double-click **`Install.cmd`**. It forwards to `install.ps1` with `-ExecutionPolicy Bypass` (process-scoped only) and keeps the window open if something fails.
+
+`Install.cmd` contains no install logic of its own; everything is still owned by `install.ps1`, so ZIP installs and clone installs behave identically. To pass flags, run it from a terminal:
+
+```bat
+Install.cmd -Shell wsl -KeyboardLayout us -InstallDependencies -CreateStartupShortcut
+```
 
 > [!NOTE]
-> **Zero setup required beforehand:** Running `install.ps1` works immediately on a fresh Windows 11 machine without needing any pre-installed software—it will automatically detect, prompt for, and install all missing dependencies for you.
+> **Windows may warn about a downloaded ZIP.** Extracted files carry Mark-of-the-Web, so SmartScreen can show "Windows protected your PC" for the launcher. That is expected for an unsigned script; choose **More info → Run anyway**. If your organisation blocks `.cmd` files outright, run PowerShell manually with `-ExecutionPolicy Bypass` as shown below. Do not disable execution policy machine-wide.
+
+> [!NOTE]
+> **Zero setup required beforehand:** Running the installer works immediately on a fresh Windows 11 machine without needing any pre-installed software—it will automatically detect, prompt for, and install all missing dependencies for you.
+
+### Option B: From a Git Clone (Development)
+
+```powershell
+git clone https://github.com/orgNero/quake-alacritty.git
+cd quake-alacritty
+```
 
 Run PowerShell from inside the repository folder:
 
 ```powershell
 # Interactive setup wizard (prompts for shell, keyboard layout, dependencies & startup)
 .\install.ps1
+
+# If script execution is blocked in your session:
+powershell -NoProfile -ExecutionPolicy Bypass -File .\install.ps1
 
 # Or run headless / unattended with explicit options:
 .\install.ps1 -Shell wsl -KeyboardLayout us -InstallDependencies -CreateStartupShortcut
@@ -120,7 +145,7 @@ The setup wizard guides you through:
 
 #### Upgrading an Existing Install
 
-Re-running `install.ps1` is a safe upgrade, not a reinstall. The script reads `%APPDATA%\alacritty\.install-state.json` (falling back to the deployed script for older installs) and reports `Existing install found (v0.11.3) -> upgrading to v0.12.0`.
+Re-running `install.ps1` is a safe upgrade, not a reinstall. The script reads `%APPDATA%\alacritty\.install-state.json` (falling back to the deployed script for older installs) and reports `Existing install found (vX) -> upgrading to vY`.
 
 - **Configuration is preserved by default.** `config.ini` is merged by appending only missing sections/keys; existing lines, ordering, comments and custom values are never rewritten. `alacritty.toml` is only patched when you explicitly choose a shell. Every modification is preceded by a timestamped `.bak` backup.
 - **Running instances are stopped gracefully.** `install.ps1` and `uninstall.ps1` detect AutoHotkey processes through `Win32_Process.CommandLine`, validate the script path, send `WM_CLOSE` so `OnExit` can destroy seam overlays, and only force-kill after a grace period.
@@ -132,7 +157,7 @@ Re-running `install.ps1` is a safe upgrade, not a reinstall. The script reads `%
 | `-Shell keep` | Keep the existing `[terminal.shell]` block in headless/CI runs |
 | `-KeyboardLayout nordic\|us` | Rebind `ToggleVisor`; omit it to keep your current binding |
 | `-UpgradeDependencies` | Print installed vs. winget-available versions, then run `winget upgrade` |
-| `-CheckForUpdates` | Advisory check against the `VERSION` marker on `main` (never downloads or installs) |
+| `-CheckForUpdates` | Advisory check against the newest **published GitHub release** (never downloads or installs) |
 | `-DryRun` | Print every planned file write, backup, shortcut, registry key and process action without applying it |
 | `-VerifyVersion` | Fail when `VERSION`, the newest `CHANGELOG.md` heading and git tags disagree |
 | `-NonInteractive` | Never prompt; use defaults for anything not supplied |
@@ -156,13 +181,14 @@ quake-update --check    # Git Bash: report only, change nothing
 ```
 
 - **Git clone installs** are fast-forwarded with `git pull --ff-only` and then re-deployed by the freshly pulled `install.ps1`. A dirty working tree, a detached HEAD, or a branch without an upstream stops the update with a plain message. Nothing is ever stashed, reset, or discarded automatically.
-- **ZIP installs** have nothing to pull, so `quake-update` prints the download link and stops. Download the newer archive and run its installer to upgrade (your configuration is preserved).
+- **ZIP installs** have nothing to pull, so `quake-update` prints the download link and stops. Download the newer archive from **[Releases](https://github.com/orgNero/quake-alacritty/releases/latest)**, extract it, and run `Install.cmd` (your configuration is preserved).
 - **Watch for the notice:** the once-a-day line (`⬆ Update available: vX (you have vY). Type 'quake-update'.`) is rendered from the cached result of the background check, so it never slows down or blocks a new terminal. It appears at most once per calendar day; `QUAKE_SHOW_HELP=none` hides it along with the startup tip. Run `quake-update` to apply it.
+- **The check reads published releases, not `main`.** A tag that has no GitHub release is never advertised, and the 60-requests-per-hour unauthenticated API limit is ample for a once-a-day check. If GitHub cannot be reached, the previous cached result is kept and the check retries later; failures never block terminal startup.
 - **Your current shell keeps the old functions** until you open a new terminal pane. The update itself runs a child installer, so the running command is never replaced mid-flight.
 
-Manual fallback: `git pull` followed by `.\install.ps1` from the clone, or download the newer release and run its installer.
+Manual fallback: for a clone, `git pull` followed by `.\install.ps1`; for a ZIP, download the newer release and run its `Install.cmd`.
 
-### Option B: Manual Setup
+### Option C: Manual Setup
 1. Copy `alacritty.toml`, `quake_alacritty.ahk`, `config.ini`, `welcome.ps1`, `quake_common.ps1`, `update.ps1`, `update-check.ps1`, `uninstall.ps1`, `VERSION`, and `CONFIG_SCHEMA` to your configuration folder:
    ```
    C:\Users\<YourUsername>\AppData\Roaming\alacritty\
@@ -307,9 +333,37 @@ The uninstaller:
 
 ---
 
+## 🩺 Troubleshooting
+
+**`Install.cmd` closes immediately or does nothing**
+- Extract the **whole** ZIP first; `Install.cmd` refuses to run when `install.ps1` is not next to it.
+- Run it from a terminal (or `cmd /k Install.cmd`) so the error stays visible.
+- If `.cmd` files are blocked by policy, use PowerShell directly:
+  ```powershell
+  powershell -NoProfile -ExecutionPolicy Bypass -File .\install.ps1
+  ```
+  `-ExecutionPolicy Bypass` applies to that process only; it does not change machine or user policy.
+
+**SmartScreen or "Windows protected your PC" on a downloaded ZIP**
+- Downloaded files carry Mark-of-the-Web. Open **More info → Run anyway**, or right-click the ZIP → **Properties → Unblock** *before* extracting.
+- This project ships unsigned scripts only. There is no compiled installer and no certificate to trust.
+
+**`quake-update` says "Could not update from GitHub"**
+- Check the connection and retry. Dirty trees, detached HEADs, missing upstreams and missing Git are intentionally stop states; nothing is stashed or reset for you.
+- The current shell keeps its old functions until a new pane is opened.
+
+**`-CheckForUpdates` reports "No published release found yet."**
+- That is expected before the first GitHub release exists. Tags alone are not advertised; only a published release is.
+
+**The update notice does not appear**
+- The check runs at most once a day after a success (once an hour after a failure) and is triggered when the visor starts or is toggled. Give it a moment, then open a new pane.
+- `QUAKE_SHOW_HELP=none` suppresses the notice together with the startup tip. `quake-help` still shows a pending update without consuming the daily marker.
+
+---
+
 ## 🔖 Version Metadata
 
-- **`VERSION`** — one-line semantic version of the app (currently `0.12.0`), deployed to `%APPDATA%\alacritty\VERSION`.
+- **`VERSION`** — one-line semantic version of the app, deployed to `%APPDATA%\alacritty\VERSION`. Published versions are listed on **[Releases](https://github.com/orgNero/quake-alacritty/releases)**.
 - **`CONFIG_SCHEMA`** — one-line integer that is bumped when `config.ini` keys are renamed or removed.
 - **`%APPDATA%\alacritty\.install-state.json`** — machine state written on every deploy (`version`, `configSchema`, `gitCommit`, `installedAt`, `updatedAt`, `shell`, `layout`, `targetDir`, `sourceType`, `sourceDir`). It is informational only; `VERSION`/`CONFIG_SCHEMA` remain the source of truth. `sourceType` records whether the install came from a `repo` clone or a `zip` archive, and `sourceDir` is the clone path used by `quake-update`.
 - **`%APPDATA%\alacritty\.update-check.json`** — cached result of the throttled background update check (`installedVersion`, `latestVersion`, `checkedAtUtc`, `nextCheckAtUtc`, `lastError`). Read by the terminal notice; never used as a version source of truth.
