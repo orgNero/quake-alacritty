@@ -50,7 +50,7 @@ param(
     action without applying it. This is not PowerShell ShouldProcess/-WhatIf.
 
 .PARAMETER CheckForUpdates
-    Fetch VERSION from the default branch and print an advisory notice. Works
+    Read the newest published GitHub release and print an advisory notice. Works
     standalone (runs the check and exits). Never downloads or executes anything.
 
 .PARAMETER PassThru

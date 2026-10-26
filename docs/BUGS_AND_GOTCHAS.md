@@ -414,3 +414,26 @@ With symbolic links in place, `A_ScriptFullPath` resolves directly to the reposi
 - The PowerShell helper returns before dot-sourcing `quake_common.ps1` unless a newer version is actually pending, so ordinary startup stays at baseline; the notice path costs ~12 ms once a day.
 - The Git Bash hook uses bash builtins only — `$(<file)`, `[[ $raw =~ ... ]]`, an integer version compare and `printf '%(%Y%m%d)T'` — instead of `grep`/`sed`/`sort -V`, keeping an up-to-date prompt at ~3 ms and a pending notice at ~15 ms, without dropping the notice. It strips CR/whitespace from `VERSION`, because a Windows checkout can deploy that file with CRLF line endings.
 - `install.ps1` deletes `.update-notice` on every deploy and `uninstall.ps1` removes it with the other artifacts.
+
+---
+
+## 20. Release Workflow, ZIP Packaging and the Releases API
+
+### Symptom
+- The released ZIP contains a `staging\` folder instead of the scripts at the archive root, so `Install.cmd` cannot find `install.ps1`.
+- `Install.cmd` fails with garbled labels or `goto`/block errors after checkout.
+- The update check advertises a version that has a tag but no GitHub release, or breaks with a raw HTTP error when no release exists yet.
+- A release is published whose tag, `VERSION` and `CHANGELOG.md` disagree.
+
+### Root Cause
+- `Compress-Archive -Path <staging>` archives the **folder itself**; only `-Path "<staging>\*"` puts the staged files at the archive root.
+- Git stores text as LF. A `.cmd` checked out with LF can break `cmd.exe` parsing (labels, parenthesised blocks, trailing `^`).
+- `https://api.github.com/repos/<owner>/<repo>/releases/latest` returns **404** (not an empty payload) until the first release is published, and **403** when the unauthenticated 60-requests-per-hour limit is hit. `Invoke-RestMethod` turns both into terminating errors whose `Exception.Response.StatusCode` carries the number.
+- Tags and branch tips move independently of releases and pull requests; only an explicit assertion catches drift.
+
+### Established Solution
+- The workflow stages into `$env:RUNNER_TEMP`, then calls `Compress-Archive -Path (Join-Path $staging '*')` and re-extracts the archive to assert every expected file exists at the root.
+- `.gitattributes` pins `*.cmd text eol=crlf`, and the repository stores LF in the index while checkouts (including `windows-latest`) get CRLF.
+- `Invoke-QuakeUpdateCheck` reads `tag_name`, strips a leading `v`, validates semver and returns the same `InstalledVersion`/`AvailableVersion`/`UpdateAvailable`/`CompareUrl`/`Error` object as before. It maps 404 to `No published release found yet.` and 403 to a short rate-limit message, and deliberately **never** falls back to raw `main/VERSION`: branch code must not be advertised as a release.
+- The workflow runs `install.ps1 -VerifyVersion` plus its own tag/heading/date assertions and fails without editing any file. A broken published release is fixed by shipping the next patch version, never by rewriting the tag.
+- `Install.cmd` stays deliberately dumb (sibling-file guard, one `powershell -File` call, `if errorlevel 1 pause`). Mark-of-the-Web/SmartScreen is documented in `README.md` rather than bypassed.

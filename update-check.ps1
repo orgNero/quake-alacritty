@@ -2,7 +2,7 @@
 param(
     [int]$TimeoutSeconds = 3,
     [switch]$Force,
-    [string]$Url = "https://raw.githubusercontent.com/orgNero/quake-alacritty/main/VERSION"
+    [string]$Url = "https://api.github.com/repos/orgNero/quake-alacritty/releases/latest"
 )
 
 <#

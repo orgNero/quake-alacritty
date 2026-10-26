@@ -500,13 +500,15 @@ function Compare-QuakeVersion {
 
 # Advisory-only update check shared by install.ps1 (-CheckForUpdates),
 # update-check.ps1 (background cache writer) and update.ps1 (-Check).
-# Never downloads or installs anything; returns a result object instead.
+# Reads the newest *published* GitHub release, so a tag without a release is
+# never advertised. Never downloads or installs anything; returns a result
+# object instead.
 function Invoke-QuakeUpdateCheck {
     [CmdletBinding()]
     param(
         [string]$InstalledVersion,
         [int]$TimeoutSeconds = 3,
-        [string]$Url = "https://raw.githubusercontent.com/orgNero/quake-alacritty/main/VERSION"
+        [string]$Url = "https://api.github.com/repos/orgNero/quake-alacritty/releases/latest"
     )
 
     $repositoryUrl = "https://github.com/orgNero/quake-alacritty"
@@ -518,18 +520,43 @@ function Invoke-QuakeUpdateCheck {
         Error            = $null
     }
 
+    $statusCode = $null
+    $payload = $null
     try {
         [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-        $response = Invoke-WebRequest -Uri $Url -UseBasicParsing -TimeoutSec $TimeoutSeconds `
-            -Headers @{ "Cache-Control" = "no-cache"; "Pragma" = "no-cache" } -ErrorAction Stop
-        $remoteVersion = ([string]$response.Content).Trim()
+        $payload = Invoke-RestMethod -Uri $Url -TimeoutSec $TimeoutSeconds -ErrorAction Stop `
+            -Headers @{
+                "Accept"        = "application/vnd.github+json"
+                "User-Agent"    = "quake-alacritty-update-check"
+                "Cache-Control" = "no-cache"
+                "Pragma"        = "no-cache"
+            }
     } catch {
-        $result.Error = $_.Exception.Message
+        # Invoke-RestMethod wraps HTTP failures; keep a short, plain message.
+        try {
+            if ($null -ne $_.Exception.Response -and $null -ne $_.Exception.Response.StatusCode) {
+                $statusCode = [int]$_.Exception.Response.StatusCode
+            }
+        } catch { }
+
+        if ($statusCode -eq 404) {
+            $result.Error = "No published release found yet."
+        } elseif ($statusCode -eq 403) {
+            $result.Error = "GitHub API rate limit reached. Try again later."
+        } else {
+            $result.Error = $_.Exception.Message
+        }
         return $result
     }
 
+    $tag = $null
+    if ($null -ne $payload -and $null -ne $payload.PSObject.Properties['tag_name']) {
+        $tag = [string]$payload.tag_name
+    }
+    $remoteVersion = $tag.Trim() -replace '^v', ''
+
     if ($remoteVersion -notmatch '^\d+\.\d+\.\d+([-+].*)?$') {
-        $result.Error = "Unexpected VERSION payload from $Url"
+        $result.Error = "Unexpected release payload from $Url"
         return $result
     }
 
