@@ -83,12 +83,35 @@ function Write-QuakeInstallState {
         [string]$GitCommit,
         [string]$InstalledAt,
         [string]$Shell,
-        [string]$Layout
+        [string]$Layout,
+        [ValidateSet("repo", "zip", "")]
+        [string]$SourceType,
+        [string]$SourceDir
     )
 
     $statePath = Get-QuakeInstallStatePath -TargetDir $TargetDir
     $now = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
     if ([string]::IsNullOrWhiteSpace($InstalledAt)) { $InstalledAt = $now }
+
+    # Preserve install-source fields when a caller does not supply them, so an
+    # older call site (or a future one) never blanks them.
+    $existing = $null
+    if (Test-Path $statePath) {
+        try {
+            $raw = Get-Content -Path $statePath -Raw -ErrorAction Stop
+            if (-not [string]::IsNullOrWhiteSpace($raw)) { $existing = $raw | ConvertFrom-Json }
+        } catch {
+            Write-Verbose "Could not read existing install state: $_"
+        }
+    }
+    if ([string]::IsNullOrWhiteSpace($SourceType) -and $null -ne $existing -and
+        $null -ne $existing.PSObject.Properties['sourceType']) {
+        $SourceType = [string]$existing.sourceType
+    }
+    if ([string]::IsNullOrWhiteSpace($SourceDir) -and $null -ne $existing -and
+        $null -ne $existing.PSObject.Properties['sourceDir']) {
+        $SourceDir = [string]$existing.sourceDir
+    }
 
     $state = [ordered]@{
         version      = $Version
@@ -99,6 +122,8 @@ function Write-QuakeInstallState {
         shell        = $Shell
         layout       = $Layout
         targetDir    = $TargetDir
+        sourceType   = $SourceType
+        sourceDir    = $SourceDir
     }
 
     $json = $state | ConvertTo-Json -Depth 4
@@ -471,4 +496,83 @@ function Compare-QuakeVersion {
     } catch {
         return ([string]::Compare($leftCore, $rightCore, [System.StringComparison]::OrdinalIgnoreCase))
     }
+}
+
+# Advisory-only update check shared by install.ps1 (-CheckForUpdates),
+# update-check.ps1 (background cache writer) and update.ps1 (-Check).
+# Reads the newest *published* GitHub release, so a tag without a release is
+# never advertised. Never downloads or installs anything; returns a result
+# object instead.
+function Invoke-QuakeUpdateCheck {
+    [CmdletBinding()]
+    param(
+        [string]$InstalledVersion,
+        [int]$TimeoutSeconds = 3,
+        [string]$Url = "https://api.github.com/repos/orgNero/quake-alacritty/releases/latest"
+    )
+
+    $repositoryUrl = "https://github.com/orgNero/quake-alacritty"
+    $result = [pscustomobject]@{
+        InstalledVersion = $InstalledVersion
+        AvailableVersion = $null
+        UpdateAvailable  = $false
+        CompareUrl       = $null
+        Error            = $null
+    }
+
+    $statusCode = $null
+    $payload = $null
+    try {
+        [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+        $payload = Invoke-RestMethod -Uri $Url -TimeoutSec $TimeoutSeconds -ErrorAction Stop `
+            -Headers @{
+                "Accept"        = "application/vnd.github+json"
+                "User-Agent"    = "quake-alacritty-update-check"
+                "Cache-Control" = "no-cache"
+                "Pragma"        = "no-cache"
+            }
+    } catch {
+        # Invoke-RestMethod wraps HTTP failures; keep a short, plain message.
+        try {
+            if ($null -ne $_.Exception.Response -and $null -ne $_.Exception.Response.StatusCode) {
+                $statusCode = [int]$_.Exception.Response.StatusCode
+            }
+        } catch { }
+
+        if ($statusCode -eq 404) {
+            $result.Error = "No published release found yet."
+        } elseif ($statusCode -eq 403) {
+            $result.Error = "GitHub API rate limit reached. Try again later."
+        } else {
+            $result.Error = $_.Exception.Message
+        }
+        return $result
+    }
+
+    $tag = $null
+    if ($null -ne $payload -and $null -ne $payload.PSObject.Properties['tag_name']) {
+        $tag = [string]$payload.tag_name
+    }
+    $remoteVersion = $tag.Trim() -replace '^v', ''
+
+    if ($remoteVersion -notmatch '^\d+\.\d+\.\d+([-+].*)?$') {
+        $result.Error = "Unexpected release payload from $Url"
+        return $result
+    }
+
+    $result.AvailableVersion = $remoteVersion
+
+    if ($InstalledVersion) {
+        try {
+            $result.UpdateAvailable = (Compare-QuakeVersion -Left $remoteVersion -Right $InstalledVersion) -gt 0
+        } catch {
+            $result.UpdateAvailable = ($remoteVersion -ne $InstalledVersion)
+        }
+    }
+
+    if ($result.UpdateAvailable) {
+        $result.CompareUrl = "$repositoryUrl/compare/v$InstalledVersion...v$remoteVersion"
+    }
+
+    return $result
 }

@@ -357,3 +357,83 @@ With symbolic links in place, `A_ScriptFullPath` resolves directly to the reposi
 2. **Defensive Window Operations (`quake_alacritty.ahk`)**:
    - Wrap `WinShow`, `WinSetAlwaysOnTop`, `WinMove`, `WinHide`, and `WinActivate` in `try` blocks.
    - Verify `WinExist("ahk_id " hwnd)` before pushing new HWNDs to monitor tracking arrays (`g_MonitorWindows`).
+
+---
+
+## 17. Background Update Check: Console Flash, `A_NowUTC` and PS 5.1 JSON Nulls
+
+### Symptom
+- A short `powershell.exe` console flashes when the visor script starts or the visor is toggled.
+- The cache's `lastError` is written as `""` instead of `null`, so consumers cannot distinguish "failed" from "no error".
+
+### Root Cause
+- AutoHotkey's `Run()` starts a console-subsystem process with a visible console unless the `"Hide"` option (or `SW_HIDE`) is supplied. `RunWait` is not required to get a hidden child, and waiting on the check would block the AHK thread.
+- `A_NowUTC` is a fixed-width `yyyyMMddHHmmss` stamp. AHK compares digit-only strings numerically, so comparing it to a 14-digit `nextCheckAtUtc` is chronological **only** while both values keep that width; Nan/non-numeric values fall back to string comparison.
+- Windows PowerShell 5.1 converts `$null` to `""` when binding to a typed `[string]` parameter. A cache writer that takes `[string]$LastError` therefore emits `""`, not JSON `null`.
+
+### Established Solution
+- `MaybeCheckForUpdates()` resolves the checker next to the script first, then in `%APPDATA%\alacritty`, and spawns it with `Run(..., , "Hide")` inside a `try` block. It never uses `RunWait` and keeps a 5-minute in-memory debounce (duplicate-spawn guard), while the cache's `nextCheckAtUtc` (+24 h success, +1 h failure) drives retries from long-running instances.
+- The cache gate uses a targeted regex and compares the fixed-width UTC strings (`nextCheck > A_NowUTC`); a missing or malformed field is treated as due.
+- `update-check.ps1` declares `[object]$LastError` so `null` survives `ConvertTo-Json`, and writes the cache atomically (temp file + `Move-Item -Force`) while preserving unknown JSON fields for forward compatibility.
+
+---
+
+## 18. Updater Process Handoff: `Start-Process -Wait` and PS 5.1 Native Stderr
+
+### Symptom
+- `quake-update` appears to hang forever after the child installer prints its success summary.
+- A failing `git` probe (`rev-parse '@{u}'`, `pull --ff-only`) aborts the updater with a raw `NativeCommandError` instead of a plain message, even though stderr was redirected.
+
+### Root Cause
+- `Start-Process -Wait` waits for the started process **and its descendants**. The installer relaunches AutoHotkey and exits, but the AHK grandchild keeps the wait alive indefinitely.
+- Windows PowerShell 5.1 converts native stderr into a terminating `NativeCommandError` while `$ErrorActionPreference = "Stop"`. Redirecting with `2>$null` or `2> file` does **not** prevent the termination; only `2>&1` combined with a relaxed preference (or a helper that relaxes it) lets the caller inspect `$LASTEXITCODE`.
+
+### Established Solution
+- `update.ps1` launches the installer with the call operator (`& $powerShellExe -File $installer ...`) and reads `$LASTEXITCODE`. That waits for the direct child only, so the detached AHK process cannot block the updater.
+- All git calls go through `Invoke-QuakeGit`, which temporarily sets `$ErrorActionPreference = "Continue"`, redirects stderr to a temp file, restores the preference in `finally`, and returns `ExitCode`/`Lines`/`Text`. Every failure path then prints a plain-language sentence; theme detection and error extraction never see PowerShell's stderr decoration.
+- Prefer probing capabilities (`rev-parse --show-toplevel`) and checking `$LASTEXITCODE` over assuming a clean stderr stream from `git`.
+
+---
+
+## 19. Cached Update Notice: Stale `installedVersion`, Once-a-Day Marker and Prompt Latency
+
+### Symptom
+- After `quake-update`, every new terminal still prints `Update available` even though `VERSION` already reports the new version.
+- A handwritten notice prints on every pane instead of once per calendar day, or `quake-help` silently consumes the daily throttle.
+- A naive implementation adds tens of milliseconds to every terminal startup.
+
+### Root Cause
+- The cache's `installedVersion` is only refreshed by the next background check, so comparing `latestVersion` against the cache keeps advertising the version that was just replaced.
+- `Get-Command <name>` for a command that does **not** exist scans the whole command table (~25 ms per call), and dot-sourcing `quake_common.ps1` inside a function re-parses it on every invocation because the definitions land in that function's scope.
+- MSYS2/Git Bash `fork()` is expensive (~10-25 ms per external command). A prompt hook built from `cygpath` + `sed` + `head` + `tr` + `sort -V` forks 7+ processes and adds ~200 ms to **every** new shell, even when no notice is due.
+- Writing the `.update-notice` marker from the manual `quake-help` path would consume the once-a-day budget for a view the user requested explicitly. A failed marker write must not suppress the notice or throw.
+
+### Established Solution
+- `welcome.ps1` compares the cache's `latestVersion` with the deployed `VERSION` file next to the script and uses the cache's `installedVersion` only when `VERSION` is missing.
+- The `.update-notice` marker (one line, local `yyyyMMdd`) is written **only** by the automatic startup path (`-Startup`, passed by AHK and by the Git Bash banner hook). Manual `quake-help` displays the notice without writing or consuming the marker; marker write failures are swallowed.
+- The PowerShell helper returns before dot-sourcing `quake_common.ps1` unless a newer version is actually pending, so ordinary startup stays at baseline; the notice path costs ~12 ms once a day.
+- The Git Bash hook uses bash builtins only — `$(<file)`, `[[ $raw =~ ... ]]`, an integer version compare and `printf '%(%Y%m%d)T'` — instead of `grep`/`sed`/`sort -V`, keeping an up-to-date prompt at ~3 ms and a pending notice at ~15 ms, without dropping the notice. It strips CR/whitespace from `VERSION`, because a Windows checkout can deploy that file with CRLF line endings.
+- `install.ps1` deletes `.update-notice` on every deploy and `uninstall.ps1` removes it with the other artifacts.
+
+---
+
+## 20. Release Workflow, ZIP Packaging and the Releases API
+
+### Symptom
+- The released ZIP contains a `staging\` folder instead of the scripts at the archive root, so `Install.cmd` cannot find `install.ps1`.
+- `Install.cmd` fails with garbled labels or `goto`/block errors after checkout.
+- The update check advertises a version that has a tag but no GitHub release, or breaks with a raw HTTP error when no release exists yet.
+- A release is published whose tag, `VERSION` and `CHANGELOG.md` disagree.
+
+### Root Cause
+- `Compress-Archive -Path <staging>` archives the **folder itself**; only `-Path "<staging>\*"` puts the staged files at the archive root.
+- Git stores text as LF. A `.cmd` checked out with LF can break `cmd.exe` parsing (labels, parenthesised blocks, trailing `^`).
+- `https://api.github.com/repos/<owner>/<repo>/releases/latest` returns **404** (not an empty payload) until the first release is published, and **403** when the unauthenticated 60-requests-per-hour limit is hit. `Invoke-RestMethod` turns both into terminating errors whose `Exception.Response.StatusCode` carries the number.
+- Tags and branch tips move independently of releases and pull requests; only an explicit assertion catches drift.
+
+### Established Solution
+- The workflow stages into `$env:RUNNER_TEMP`, then calls `Compress-Archive -Path (Join-Path $staging '*')` and re-extracts the archive to assert every expected file exists at the root.
+- `.gitattributes` pins `*.cmd text eol=crlf`, and the repository stores LF in the index while checkouts (including `windows-latest`) get CRLF.
+- `Invoke-QuakeUpdateCheck` reads `tag_name`, strips a leading `v`, validates semver and returns the same `InstalledVersion`/`AvailableVersion`/`UpdateAvailable`/`CompareUrl`/`Error` object as before. It maps 404 to `No published release found yet.` and 403 to a short rate-limit message, and deliberately **never** falls back to raw `main/VERSION`: branch code must not be advertised as a release.
+- The workflow runs `install.ps1 -VerifyVersion` plus its own tag/heading/date assertions and fails without editing any file. A broken published release is fixed by shipping the next patch version, never by rewriting the tag.
+- `Install.cmd` stays deliberately dumb (sibling-file guard, one `powershell -File` call, `if errorlevel 1 pause`). Mark-of-the-Web/SmartScreen is documented in `README.md` rather than bypassed.
