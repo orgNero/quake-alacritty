@@ -87,19 +87,20 @@ if (Test-Path $shortcutPath) {
 
 # 3. Clean up PowerShell Profile hook
 Write-Host "`n📜 Cleaning up PowerShell profile..." -ForegroundColor Yellow
+$profileBlockPattern = '(?s)\r?\n?# >>> Quake Alacritty >>>.*?# <<< Quake Alacritty <<<[ \t]*\r?\n?'
+$legacyProfilePattern = '(?m)^\s*# Quake Alacritty Cheat Sheet[^\r\n]*[\r\n]+|^\s*function quake-(help|env|update)\s*\{[^}]*\}\s*[\r\n]*'
 if (Test-Path $PROFILE) {
     try {
         $profileContent = Get-Content $PROFILE -Raw -ErrorAction SilentlyContinue
-        if ($profileContent -match 'quake-help|quake-env') {
-            # Remove comment and function line
-            $cleaned = $profileContent -replace '(?m)^\s*# Quake Alacritty Cheat Sheet.*\s*[\r\n]+', ''
-            $cleaned = $cleaned -replace '(?m)^\s*function quake-help\s*\{[^}]*\}\s*[\r\n]+', ''
-            $cleaned = $cleaned -replace '(?m)^\s*function quake-env\s*\{[^}]*\}\s*[\r\n]+', ''
+        if ($null -eq $profileContent) { $profileContent = "" }
+        if ($profileContent -match 'Quake Alacritty|quake-(help|env|update)') {
+            $cleaned = [regex]::Replace($profileContent, $profileBlockPattern, "`r`n")
+            $cleaned = [regex]::Replace($cleaned, $legacyProfilePattern, '')
             $cleaned = $cleaned.TrimEnd() + "`r`n"
             Set-Content -Path $PROFILE -Value $cleaned -Encoding UTF8
-            Write-Host "  Removed 'quake-help' and 'quake-env' registrations from `$PROFILE." -ForegroundColor Green
+            Write-Host "  Removed 'quake-help', 'quake-env' and 'quake-update' registrations from `$PROFILE." -ForegroundColor Green
         } else {
-            Write-Host "  'quake-help' / 'quake-env' not found in `$PROFILE." -ForegroundColor Gray
+            Write-Host "  'quake-help' / 'quake-env' / 'quake-update' not found in `$PROFILE." -ForegroundColor Gray
         }
     } catch {
         Write-Warning "  Could not update PowerShell profile: $_"
@@ -108,19 +109,21 @@ if (Test-Path $PROFILE) {
 
 # 3b. Clean up Git Bash profile hook (~/.bashrc)
 $bashrcPath = Join-Path $env:USERPROFILE ".bashrc"
+$legacyBashPattern = '(?m)^\s*# Quake Alacritty Cheat Sheet[^\r\n]*[\r\n]+|^\s*quake-(help|env|update)\(\)\s*\{[^\r\n]*\}\s*[\r\n]*'
+$legacyBashHintPattern = '(?ms)^if \[ -n "\$QUAKE_SHOW_HELP" \].*?^fi[ \t]*[\r\n]*'
 if (Test-Path $bashrcPath) {
     try {
-        $bashrcContent = Get-Content $bashrcPath -Raw -ErrorAction SilentlyContinue
-        if ($bashrcContent -match 'quake-help|quake-env|QUAKE_SHOW_HELP') {
-            $cleaned = $bashrcContent -replace '(?m)^\s*# Quake Alacritty Cheat Sheet.*\s*[\r\n]+', ''
-            $cleaned = $cleaned -replace '(?m)^\s*quake-help\(\)\s*\{[^}]*\}\s*[\r\n]+', ''
-            $cleaned = $cleaned -replace '(?m)^\s*quake-env\(\)\s*\{[^}]*\}\s*[\r\n]+', ''
-            $cleaned = $cleaned -replace '(?s)if \[ -n "\$QUAKE_SHOW_HELP" \].*?fi\s*[\r\n]*', ''
+        $bashrcContent = Get-Content $bashrcPath -Raw -Encoding UTF8 -ErrorAction SilentlyContinue
+        if ($null -eq $bashrcContent) { $bashrcContent = "" }
+        if ($bashrcContent -match 'Quake Alacritty|quake-(help|env|update)|QUAKE_SHOW_HELP') {
+            $cleaned = [regex]::Replace($bashrcContent, $profileBlockPattern, "`n")
+            $cleaned = [regex]::Replace($cleaned, $legacyBashPattern, '')
+            $cleaned = [regex]::Replace($cleaned, $legacyBashHintPattern, '')
             $cleaned = $cleaned.TrimEnd() + "`n"
             [System.IO.File]::WriteAllText($bashrcPath, $cleaned, (New-Object System.Text.UTF8Encoding($false)))
-            Write-Host "  Removed 'quake-help' and 'quake-env' registrations from $bashrcPath." -ForegroundColor Green
+            Write-Host "  Removed 'quake-help', 'quake-env' and 'quake-update' registrations from $bashrcPath." -ForegroundColor Green
         } else {
-            Write-Host "  'quake-help' / 'quake-env' not found in $bashrcPath." -ForegroundColor Gray
+            Write-Host "  'quake-help' / 'quake-env' / 'quake-update' not found in $bashrcPath." -ForegroundColor Gray
         }
     } catch {
         Write-Warning "  Could not update .bashrc: $_"
@@ -145,9 +148,13 @@ $artifactFiles = @(
     "quake_alacritty.ahk",
     "welcome.ps1",
     "quake_common.ps1",
+    "update.ps1",
+    "update-check.ps1",
     "VERSION",
     "CONFIG_SCHEMA",
     ".install-state.json",
+    ".update-check.json",
+    ".update-notice",
     "uninstall.ps1"
 )
 foreach ($file in $artifactFiles) {

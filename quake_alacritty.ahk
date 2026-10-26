@@ -62,6 +62,9 @@ global g_LayoutLock            := 0
 ; Last non-visor foreground window; focus returns here when the visor is hidden
 global g_VisorReturnHwnd       := 0
 
+; In-memory debounce for the background update check (not a session-wide lock)
+global g_LastUpdateCheckSpawn  := 0
+
 ; Helper: Resolves configuration file location and loads user preferences
 LoadConfig()
 {
@@ -1605,7 +1608,7 @@ LaunchTerminalProcess()
 
             if (welcomeScript != "")
             {
-                argFlag := (g_ShowHelpOnStart == "tip") ? " -TipOnly" : ""
+                argFlag := (g_ShowHelpOnStart == "tip") ? " -TipOnly -Startup" : " -Startup"
                 Run(Format('alacritty.exe -e {1} -NoLogo -NoExit -ExecutionPolicy Bypass -File "{2}"{3}', configuredShell, welcomeScript, argFlag), startDir)
 
                 if (g_ShowHelpOnStart == "first-run" && g_FirstRun)
@@ -1854,6 +1857,9 @@ ToggleVisor()
 {
     global g_MultiMonitorMode, g_MonitorWindows, g_AlacrittyOrder, g_LayoutLock
     DetectHiddenWindows true
+
+    ; Advisory background check: reads a local cache only and never waits.
+    MaybeCheckForUpdates()
 
     ; Detect monitor containing mouse cursor
     targetMon := GetMouseMonitor()
@@ -2571,6 +2577,47 @@ ReadAppVersion()
     }
 }
 
+; Spawns the throttled background update check. Local file reads only: the
+; PowerShell child owns the network call, so startup and the visor stay
+; non-blocking. Advisory only - it never applies an update.
+MaybeCheckForUpdates()
+{
+    global g_LastUpdateCheckSpawn
+    if (g_LastUpdateCheckSpawn && (A_TickCount - g_LastUpdateCheckSpawn < 300000))
+        return
+
+    checker := ""
+    if FileExist(A_ScriptDir . "\update-check.ps1")
+        checker := A_ScriptDir . "\update-check.ps1"
+    else if FileExist(EnvGet("APPDATA") . "\alacritty\update-check.ps1")
+        checker := EnvGet("APPDATA") . "\alacritty\update-check.ps1"
+    if (checker == "")
+        return
+
+    ; Only nextCheckAtUtc is needed: fixed-width UTC digits compare correctly.
+    nextCheck := ""
+    cachePath := EnvGet("APPDATA") . "\alacritty\.update-check.json"
+    if FileExist(cachePath)
+    {
+        try {
+            raw := FileRead(cachePath, "UTF-8")
+            if RegExMatch(raw, '"nextCheckAtUtc"\s*:\s*"(\d{14})"', &m)
+                nextCheck := m[1]
+        }
+    }
+    if (nextCheck != "" && nextCheck > A_NowUTC)
+        return
+
+    psExe := EnvGet("SystemRoot") . "\System32\WindowsPowerShell\v1.0\powershell.exe"
+    if !FileExist(psExe)
+        psExe := "powershell.exe"
+
+    try {
+        Run('"' . psExe . '" -NoProfile -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -File "' . checker . '"', , "Hide")
+        g_LastUpdateCheckSpawn := A_TickCount
+    }
+}
+
 ; -------------------------------------------------------------
 ; Graceful Shutdown
 ; -------------------------------------------------------------
@@ -2594,6 +2641,7 @@ OnCloseMessage(wParam, lParam, msg, hwnd)
 LoadConfig()
 ReadAppVersion()
 RegisterHotkeys()
+MaybeCheckForUpdates()
 OnMessage(0x007E, OnDisplayChange)
 OnMessage(0x0010, OnCloseMessage)
 OnExit(CleanupOnExit)

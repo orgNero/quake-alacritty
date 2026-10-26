@@ -50,7 +50,7 @@ param(
     action without applying it. This is not PowerShell ShouldProcess/-WhatIf.
 
 .PARAMETER CheckForUpdates
-    Fetch VERSION from the default branch and print an advisory notice. Works
+    Read the newest published GitHub release and print an advisory notice. Works
     standalone (runs the check and exits). Never downloads or executes anything.
 
 .PARAMETER PassThru
@@ -322,55 +322,6 @@ function Test-QuakeVersionConsistency {
         Problems = @($problems)
         IsValid  = ($problems.Count -eq 0)
     }
-}
-
-function Invoke-QuakeUpdateCheck {
-    param(
-        [string]$InstalledVersion,
-        [int]$TimeoutSeconds = 3
-    )
-
-    $url = "https://raw.githubusercontent.com/orgNero/quake-alacritty/main/VERSION"
-    $result = [pscustomobject]@{
-        InstalledVersion = $InstalledVersion
-        AvailableVersion = $null
-        UpdateAvailable  = $false
-        CompareUrl       = $null
-        Error            = $null
-    }
-
-    try {
-        [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-        $response = Invoke-WebRequest -Uri $url -UseBasicParsing -TimeoutSec $TimeoutSeconds `
-            -Headers @{ "Cache-Control" = "no-cache"; "Pragma" = "no-cache" } -ErrorAction Stop
-        $remoteVersion = ([string]$response.Content).Trim()
-    } catch {
-        $result.Error = $_.Exception.Message
-        return $result
-    }
-
-    if ($remoteVersion -notmatch '^\d+\.\d+\.\d+([-+].*)?$') {
-        $result.Error = "Unexpected VERSION payload from $url"
-        return $result
-    }
-
-    $result.AvailableVersion = $remoteVersion
-
-    if ($InstalledVersion) {
-        $installedCore = ($InstalledVersion -replace '^v', '') -replace '[-+].*$', ''
-        $remoteCore = $remoteVersion -replace '[-+].*$', ''
-        try {
-            $result.UpdateAvailable = ([version]$remoteCore).CompareTo([version]$installedCore) -gt 0
-        } catch {
-            $result.UpdateAvailable = ($remoteVersion -ne $InstalledVersion)
-        }
-    }
-
-    if ($result.UpdateAvailable) {
-        $result.CompareUrl = "$RepositoryUrl/compare/v$InstalledVersion...v$remoteVersion"
-    }
-
-    return $result
 }
 
 # -----------------------------------------------------------------------------
@@ -777,7 +728,7 @@ $destIni  = Join-Path $TargetDir "config.ini"
 $destTomlExisted = Test-Path $destToml
 $destIniExisted  = Test-Path $destIni
 
-$appFiles = @("quake_alacritty.ahk", "welcome.ps1", "uninstall.ps1", "quake_common.ps1", "VERSION", "CONFIG_SCHEMA")
+$appFiles = @("quake_alacritty.ahk", "welcome.ps1", "uninstall.ps1", "quake_common.ps1", "update.ps1", "update-check.ps1", "VERSION", "CONFIG_SCHEMA")
 foreach ($file in $appFiles) {
     $source = Join-Path $SourceDir $file
     $destination = Join-Path $TargetDir $file
@@ -797,6 +748,20 @@ foreach ($file in $appFiles) {
         Copy-Item -Path $source -Destination $destination -Force
         Write-Host "  [Copy] $file -> $destination" -ForegroundColor Green
     }
+}
+
+# A stale update-check cache would keep advertising the version we just deployed.
+$updateCachePath = Join-Path $TargetDir ".update-check.json"
+if (-not $DryRun -and (Test-Path $updateCachePath)) {
+    Remove-Item -Path $updateCachePath -Force -ErrorAction SilentlyContinue
+    Write-Host "  [Cache] Cleared stale update-check cache" -ForegroundColor Green
+}
+
+# A stale notice marker would hide a notice for a version that is still pending.
+$updateNoticePath = Join-Path $TargetDir ".update-notice"
+if (-not $DryRun -and (Test-Path $updateNoticePath)) {
+    Remove-Item -Path $updateNoticePath -Force -ErrorAction SilentlyContinue
+    Write-Host "  [Cache] Cleared stale update notice marker" -ForegroundColor Green
 }
 
 # Config files are user-owned: copy only when absent, merge when present, replace on -ResetConfig.
@@ -946,45 +911,132 @@ if ($shouldCreateStartup) {
 # -----------------------------------------------------------------------------
 # Step 8: Shell Profile Registration (PowerShell & Git Bash)
 # -----------------------------------------------------------------------------
-$welcomePath = Join-Path $TargetDir "welcome.ps1"
+# One idempotent block per shell, delimited by markers. On every run the block
+# is removed and rewritten, and legacy unmarked lines are cleaned up, so running
+# the installer twice can never duplicate a function.
+
+$profileBlockPattern = '(?s)\r?\n?# >>> Quake Alacritty >>>.*?# <<< Quake Alacritty <<<[ \t]*\r?\n?'
+$legacyProfilePattern = '(?m)^\s*# Quake Alacritty Cheat Sheet[^\r\n]*[\r\n]+|^\s*function quake-(help|env|update)\s*\{[^}]*\}\s*[\r\n]*'
+$legacyBashPattern = '(?m)^\s*# Quake Alacritty Cheat Sheet[^\r\n]*[\r\n]+|^\s*quake-(help|env|update)\(\)\s*\{[^\r\n]*\}\s*[\r\n]*'
+$legacyBashHintPattern = '(?ms)^if \[ -n "\$QUAKE_SHOW_HELP" \].*?^fi[ \t]*[\r\n]*'
+
+$powerShellBlock = @'
+# >>> Quake Alacritty >>>
+function quake-help  { & "$env:APPDATA\alacritty\welcome.ps1" @args }
+function quake-env   { & "$env:APPDATA\alacritty\welcome.ps1" -EnvInfo }
+function quake-update { & "$env:APPDATA\alacritty\update.ps1" @args }
+# <<< Quake Alacritty <<<
+'@ -replace "`r?`n", "`r`n"
+$powerShellBlock = $powerShellBlock.TrimEnd() + "`r`n"
+
+$bashBlock = @'
+# >>> Quake Alacritty >>>
+quake-help() { powershell.exe -NoLogo -ExecutionPolicy Bypass -File "$APPDATA/alacritty/welcome.ps1" "$@"; }
+quake-env() { powershell.exe -NoLogo -ExecutionPolicy Bypass -File "$APPDATA/alacritty/welcome.ps1" -EnvInfo; }
+quake-update() { local a=(); for x in "$@"; do if [ "$x" = "--check" ]; then a+=("-Check"); else a+=("$x"); fi; done; powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File "$APPDATA/alacritty/update.ps1" "${a[@]}"; }
+quake_version_is_newer() {
+    local a=${1#v} b=${2#v}
+    a=${a%%[-+]*} b=${b%%[-+]*}
+    local IFS=.
+    local -a av=($a) bv=($b)
+    local i x y
+    for ((i = 0; i < 3; i++)); do
+        x=${av[i]:-0}
+        y=${bv[i]:-0}
+        [[ $x =~ ^[0-9]+$ && $y =~ ^[0-9]+$ ]] || return 1
+        x=$((10#$x))
+        y=$((10#$y))
+        ((x > y)) && return 0
+        ((x < y)) && return 1
+    done
+    return 1
+}
+quake_update_notice() {
+    [ -n "$APPDATA" ] || return 0
+    local dir="$APPDATA/alacritty" raw latest installed shown today
+    [ -f "$dir/.update-check.json" ] || return 0
+    raw=$(<"$dir/.update-check.json")
+    [[ $raw =~ \"latestVersion\"[[:space:]]*:[[:space:]]*\"([^\"]*)\" ]] && latest=${BASH_REMATCH[1]}
+    [[ $raw =~ \"installedVersion\"[[:space:]]*:[[:space:]]*\"([^\"]*)\" ]] && installed=${BASH_REMATCH[1]}
+    if [ -f "$dir/VERSION" ]; then
+        installed=$(<"$dir/VERSION")
+    fi
+    latest=${latest#v}
+    installed=${installed#v}
+    installed=${installed//[[:space:]]/}
+    [ -n "$latest" ] && [ -n "$installed" ] || return 0
+    [[ $latest =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || return 0
+    quake_version_is_newer "$latest" "$installed" || return 0
+
+    today=$(printf "%(%Y%m%d)T" -1)
+    if [ -f "$dir/.update-notice" ]; then
+        shown=$(<"$dir/.update-notice")
+        [ "${shown//[[:space:]]/}" = "$today" ] && return 0
+    fi
+
+    printf '%b\n' "  \033[38;2;251;191;36m⬆ \033[38;2;148;163;184mUpdate available: v$latest (you have v$installed). Type '\033[1;38;2;56;189;248mquake-update\033[0;38;2;148;163;184m'.\033[0m"
+    printf '%s\n' "$today" > "$dir/.update-notice" 2>/dev/null || true
+}
+if [ -n "$QUAKE_SHOW_HELP" ] && [ "$QUAKE_SHOW_HELP" != "none" ]; then
+    if [ "$QUAKE_SHOW_HELP" = "banner" ]; then
+        powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File "$APPDATA/alacritty/welcome.ps1" -Startup
+    else
+        printf '%b\n' "\n  \033[38;2;251;191;36m💡 \033[38;2;148;163;184mTip: Type '\033[1;38;2;56;189;248mquake-help\033[0;38;2;148;163;184m' to view keyboard shortcuts.\033[0m\n"
+        quake_update_notice
+    fi
+fi
+# <<< Quake Alacritty <<<
+'@ -replace "`r`n", "`n"
+$bashBlock = $bashBlock.TrimEnd() + "`n"
 
 # 8a: PowerShell profile registration
 if (Test-Path $PROFILE) {
     try {
         $profileContent = Get-Content $PROFILE -Raw -ErrorAction SilentlyContinue
-        if ($profileContent -notmatch 'quake-help') {
-            if (Test-ShouldApply "Register 'quake-help' and 'quake-env' in $PROFILE") {
-                Add-Content -Path $PROFILE -Value "`n# Quake Alacritty Cheat Sheet & Environment Helper`nfunction quake-help { & `"$welcomePath`" }`nfunction quake-env { & `"$welcomePath`" -EnvInfo }"
-                Write-Host "  [Profile] Registered 'quake-help' and 'quake-env' in `$PROFILE" -ForegroundColor Green
-            }
-        } elseif ($profileContent -notmatch 'quake-env') {
-            if (Test-ShouldApply "Register 'quake-env' in $PROFILE") {
-                Add-Content -Path $PROFILE -Value "`nfunction quake-env { & `"$welcomePath`" -EnvInfo }"
-                Write-Host "  [Profile] Registered 'quake-env' in `$PROFILE" -ForegroundColor Green
-            }
+        if ($null -eq $profileContent) { $profileContent = "" }
+
+        $updatedProfile = [regex]::Replace($profileContent, $profileBlockPattern, "`r`n")
+        $updatedProfile = [regex]::Replace($updatedProfile, $legacyProfilePattern, '')
+        $updatedProfile = $updatedProfile.TrimEnd()
+        if ($updatedProfile.Length -gt 0) { $updatedProfile += "`r`n`r`n" }
+        $updatedProfile += $powerShellBlock.TrimEnd()
+        $updatedProfile = $updatedProfile.TrimEnd() + "`r`n"
+
+        if ($updatedProfile -ceq $profileContent) {
+            Write-Host "  [Profile] quake-help, quake-env and quake-update already registered in `$PROFILE" -ForegroundColor DarkGray
+        } elseif (Test-ShouldApply "Register 'quake-help', 'quake-env' and 'quake-update' in `$PROFILE") {
+            Write-QuakeTextFile -Path $PROFILE -Content $updatedProfile -ForceBom $true
+            Write-Host "  [Profile] Registered 'quake-help', 'quake-env' and 'quake-update' in `$PROFILE" -ForegroundColor Green
         }
-    } catch { }
+    } catch {
+        Write-Warning "  Could not update PowerShell profile: $_"
+    }
 }
 
 # 8b: Git Bash profile registration (~/.bashrc)
 $bashrcPath = Join-Path $env:USERPROFILE ".bashrc"
 if ($selectedShell -eq "gitbash" -or (Test-Path $bashrcPath)) {
     try {
-        $bashrcContent = if (Test-Path $bashrcPath) { Get-Content $bashrcPath -Raw -ErrorAction SilentlyContinue } else { "" }
-        if ($bashrcContent -notmatch 'quake-help') {
-            if (Test-ShouldApply "Register 'quake-help' and 'quake-env' in $bashrcPath") {
-                $bashBlock = "`n# Quake Alacritty Cheat Sheet & Environment Helper`nquake-help() { powershell.exe -NoLogo -ExecutionPolicy Bypass -File `"`$APPDATA/alacritty/welcome.ps1`" `"`$@`"; }`nquake-env() { powershell.exe -NoLogo -ExecutionPolicy Bypass -File `"`$APPDATA/alacritty/welcome.ps1`" -EnvInfo; }`nif [ -n `"`$QUAKE_SHOW_HELP`" ] && [ `"`$QUAKE_SHOW_HELP`" != `"none`" ]; then`n    if [ `"`$QUAKE_SHOW_HELP`" = `"banner`" ]; then`n        quake-help`n    else`n        printf '%b\n' `"\n  \033[38;2;251;191;36m💡 \033[38;2;148;163;184mTip: Type '\033[1;38;2;56;189;248mquake-help\033[0;38;2;148;163;184m' to view keyboard shortcuts.\033[0m\n`"`n    fi`nfi"
-                Add-Content -Path $bashrcPath -Value $bashBlock
-                Write-Host "  [Profile] Registered 'quake-help' and 'quake-env' in $bashrcPath" -ForegroundColor Green
-            }
-        } elseif ($bashrcContent -notmatch 'QUAKE_SHOW_HELP') {
-            if (Test-ShouldApply "Register QUAKE_SHOW_HELP hint in $bashrcPath") {
-                $bashTipBlock = "`nif [ -n `"`$QUAKE_SHOW_HELP`" ] && [ `"`$QUAKE_SHOW_HELP`" != `"none`" ]; then`n    if [ `"`$QUAKE_SHOW_HELP`" = `"banner`" ]; then`n        quake-help`n    else`n        printf '%b\n' `"\n  \033[38;2;251;191;36m💡 \033[38;2;148;163;184mTip: Type '\033[1;38;2;56;189;248mquake-help\033[0;38;2;148;163;184m' to view keyboard shortcuts.\033[0m\n`"`n    fi`nfi"
-                Add-Content -Path $bashrcPath -Value $bashTipBlock
-                Write-Host "  [Profile] Registered startup hint in $bashrcPath" -ForegroundColor Green
-            }
+        $bashrcContent = if (Test-Path $bashrcPath) { Get-Content $bashrcPath -Raw -Encoding UTF8 -ErrorAction SilentlyContinue } else { "" }
+        if ($null -eq $bashrcContent) { $bashrcContent = "" }
+
+        $updatedBashrc = [regex]::Replace($bashrcContent, $profileBlockPattern, "`n")
+        $updatedBashrc = [regex]::Replace($updatedBashrc, $legacyBashPattern, '')
+        $updatedBashrc = [regex]::Replace($updatedBashrc, $legacyBashHintPattern, '')
+        $updatedBashrc = $updatedBashrc.TrimEnd()
+        if ($updatedBashrc.Length -gt 0) { $updatedBashrc += "`n`n" }
+        $updatedBashrc += $bashBlock.TrimEnd()
+        $updatedBashrc = $updatedBashrc.TrimEnd() + "`n"
+
+        if ($updatedBashrc -ceq $bashrcContent) {
+            Write-Host "  [Profile] quake-help, quake-env and quake-update already registered in $bashrcPath" -ForegroundColor DarkGray
+        } elseif (Test-ShouldApply "Register 'quake-help', 'quake-env' and 'quake-update' in $bashrcPath") {
+            [System.IO.File]::WriteAllText($bashrcPath, $updatedBashrc, (New-Object System.Text.UTF8Encoding($false)))
+            Write-Host "  [Profile] Registered 'quake-help', 'quake-env' and 'quake-update' in $bashrcPath" -ForegroundColor Green
         }
-    } catch { }
+    } catch {
+        Write-Warning "  Could not update .bashrc: $_"
+    }
 }
 
 # -----------------------------------------------------------------------------
@@ -1026,10 +1078,29 @@ $stateLayout = "keep"
 if ($layoutWasChosen) { $stateLayout = $selectedLayout }
 elseif ($installState -and $installState.layout) { $stateLayout = $installState.layout }
 
+# Record how this copy was obtained. "repo" only when $SourceDir is the git work
+# tree root itself; a ZIP extracted inside another repository must stay "zip".
+$sourceType = "zip"
+$sourceDirResolved = $null
+try {
+    $sourceDirResolved = [System.IO.Path]::GetFullPath($SourceDir).TrimEnd('\')
+    $gitTopLevel = & git -C $SourceDir rev-parse --show-toplevel 2>$null
+    if ($LASTEXITCODE -eq 0 -and -not [string]::IsNullOrWhiteSpace($gitTopLevel)) {
+        $gitTopResolved = [System.IO.Path]::GetFullPath(([string]$gitTopLevel).Trim()).TrimEnd('\')
+        if ([string]::Equals($gitTopResolved, $sourceDirResolved, [System.StringComparison]::OrdinalIgnoreCase)) {
+            $sourceType = "repo"
+        }
+    }
+} catch {
+    $sourceType = "zip"
+}
+if (-not $sourceDirResolved) { $sourceDirResolved = "" }
+
 if (Test-ShouldApply "Write install state to $statePath (v$AppVersion, schema $ConfigSchema)") {
     Write-QuakeInstallState -TargetDir $TargetDir -Version $AppVersion -ConfigSchema $ConfigSchema `
-        -GitCommit $gitCommit -InstalledAt $previousInstalledAt -Shell $stateShell -Layout $stateLayout | Out-Null
-    Write-Host "  [State] Recorded install state: v$AppVersion (config schema $ConfigSchema)" -ForegroundColor Green
+        -GitCommit $gitCommit -InstalledAt $previousInstalledAt -Shell $stateShell -Layout $stateLayout `
+        -SourceType $sourceType -SourceDir $sourceDirResolved | Out-Null
+    Write-Host "  [State] Recorded install state: v$AppVersion (config schema $ConfigSchema, source $sourceType)" -ForegroundColor Green
 }
 
 # -----------------------------------------------------------------------------
