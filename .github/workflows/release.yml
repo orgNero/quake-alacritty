@@ -148,6 +148,18 @@ jobs:
           }
           $notes = $match.Value.TrimEnd()
 
+          # Publish the asset digest with the notes so a download can be verified
+          # against something other than the file itself (antivirus quarantine,
+          # mirror or typo-squatted domain).
+          $zipName = "quake-alacritty-v$version.zip"
+          if (-not (Test-Path $zipName)) {
+            Write-Error "Release asset is missing: $zipName"
+            exit 1
+          }
+          $sha256 = (Get-FileHash -Path $zipName -Algorithm SHA256).Hash.ToLower()
+          $tick = [char]96
+          $notes += "`r`n`r`n**SHA-256** ($tick$zipName$tick): $tick$sha256$tick"
+
           # Previous published tag, newest first. Never invent one.
           $allTags = @(& git tag --list 'v*' --sort=-v:refname)
           $previous = $allTags | Where-Object { $_ -ne "v$version" } | Select-Object -First 1

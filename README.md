@@ -106,7 +106,7 @@ Install.cmd -Shell wsl -KeyboardLayout us -InstallDependencies -CreateStartupSho
 ```
 
 > [!NOTE]
-> **Windows may warn about a downloaded ZIP.** Extracted files carry Mark-of-the-Web, so SmartScreen can show "Windows protected your PC" for the launcher. That is expected for an unsigned script; choose **More info → Run anyway**. If your organisation blocks `.cmd` files outright, run PowerShell manually with `-ExecutionPolicy Bypass` as shown below. Do not disable execution policy machine-wide.
+> **Windows may warn about a downloaded ZIP.** Extracted files carry Mark-of-the-Web, so SmartScreen can show "Windows protected your PC" for the launcher. That is expected for an unsigned script; choose **More info → Run anyway**. If your organisation blocks `.cmd` files outright, run PowerShell manually with `-ExecutionPolicy Bypass` as shown below. Do not disable execution policy machine-wide. On a machine with managed endpoint security (SentinelOne, CrowdStrike Falcon, Defender for Endpoint), see the antivirus/EDR quarantine entry under [Troubleshooting](#-troubleshooting) before running the installer.
 
 > [!NOTE]
 > **Zero setup required beforehand:** Running the installer works immediately on a fresh Windows 11 machine without needing any pre-installed software—it will automatically detect, prompt for, and install all missing dependencies for you.
@@ -346,6 +346,20 @@ The uninstaller:
 **SmartScreen or "Windows protected your PC" on a downloaded ZIP**
 - Downloaded files carry Mark-of-the-Web. Open **More info → Run anyway**, or right-click the ZIP → **Properties → Unblock** *before* extracting.
 - This project ships unsigned scripts only. There is no compiled installer and no certificate to trust.
+- On a machine with managed endpoint security (SentinelOne, CrowdStrike Falcon, Defender for Endpoint), also read the quarantine entry below before running anything.
+
+**Antivirus or endpoint security quarantines the ZIP, `Install.cmd` or the visor**
+- **The release contains no executable.** It is a `.cmd`, plain-text `.ps1`/`.ahk` files and the default configs. If the archive you downloaded contains an `.exe`, `.dll` or `.scr`, it is not an official release — stop, delete it, and re-download from **[Releases](https://github.com/orgNero/quake-alacritty/releases/latest)**.
+- **Verify before you allow it:**
+  ```powershell
+  Get-FileHash .\quake-alacritty-vX.Y.Z.zip -Algorithm SHA256
+  ```
+  The expected hash is printed in the release notes of the tag you downloaded. Extract from that verified archive only.
+- **Heuristic detections are expected**, because everything the installer legitimately does is also what malware does: it runs an unsigned script with `-ExecutionPolicy Bypass`, creates a Startup shortcut and an `HKCU` uninstall entry, rewrites `$PROFILE` and `~/.bashrc`, calls `winget` (installing AutoHotkey, which many engines already flag on its own), and the visor installs a global keyboard hook (`InstallKeybdHook`) and enumerates windows through Win32 calls. Static AI and script engines react to that pattern, not to a specific bad file.
+- **Preview instead of trusting:** `.\src\install.ps1 -DryRun` prints every planned file write, shortcut, registry key and profile edit and changes nothing.
+- **After reviewing it**, add exclusions for the extracted folder and for `%APPDATA%\alacritty`, or submit a false-positive report to your vendor with the SHA-256 above.
+- **On a managed machine**, enterprise EDR can respond to a detection by cutting the endpoint's network access (SentinelOne's "disconnect from network" / containment, leaving only the management console reachable). That is the security agent, not Quake Alacritty, and a local user usually cannot lift it — ask IT to reconnect the endpoint. Ask them for the detection name and the engine (static vs. behavioural) as well.
+- **Recovering from a quarantine:** removing the files does not undo what the installer already did. Run `%APPDATA%\alacritty\uninstall.ps1` if it survived; otherwise remove `%APPDATA%\alacritty`, the `quake_alacritty.lnk` shortcut in `%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup`, the `HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\QuakeAlacritty` key, and the `# >>> Quake Alacritty >>>` … `# <<< Quake Alacritty <<<` block in `$PROFILE` and `~/.bashrc`.
 
 **`quake-update` says "Could not update from GitHub"**
 - Check the connection and retry. Dirty trees, detached HEADs, missing upstreams and missing Git are intentionally stop states; nothing is stashed or reset for you.
