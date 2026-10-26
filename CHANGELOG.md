@@ -7,7 +7,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
-## [Unreleased] - 2026-10-26
+## [0.13.3] - 2026-10-26
 
 ## Features
 ### Major
@@ -32,6 +32,7 @@ _None_
 ## Configuration & Tooling
 - `README.md`: documented antivirus/EDR quarantine — why heuristic engines flag an unsigned script that installs a keyboard hook, creates a Startup shortcut and edits shell profiles; how to verify the download by SHA-256 before allowing it; `-DryRun` as the review path; how an enterprise EDR network containment is reverted; and what a quarantine does *not* clean up.
 - `.github/workflows/release.yml`: published release notes now include the SHA-256 of the ZIP asset, so a download can be verified against the release text instead of the file itself.
+- Bumped `VERSION` to `0.13.3`.
 
 ---
 
