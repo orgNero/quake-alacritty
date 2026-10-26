@@ -348,6 +348,15 @@ The uninstaller:
 - Check the connection and retry. Dirty trees, detached HEADs, missing upstreams and missing Git are intentionally stop states; nothing is stashed or reset for you.
 - The current shell keeps its old functions until a new pane is opened.
 
+**`quake-update` cannot fast-forward after upgrading to v0.13.1**
+- v0.13.1 rewrote the repository history to remove files that should never have been published, so clones made before it share no common commit with `main` and `git pull --ff-only` refuses to continue. Re-clone once, then redeploy:
+  ```bash
+  git clone https://github.com/orgNero/quake-alacritty.git
+  cd quake-alacritty
+  pwsh -File .\src\install.ps1
+  ```
+  Your `config.ini` and `alacritty.toml` in `%APPDATA%\alacritty` are preserved.
+
 **`-CheckForUpdates` reports "No published release found yet."**
 - That is expected before the first GitHub release exists. Tags alone are not advertised; only a published release is.
 

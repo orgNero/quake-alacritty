@@ -30,12 +30,16 @@ _None_
 _None_
 
 ## Configuration & Tooling
-- Moved the runtime scripts, templates and version markers into `src/`; the repository root now keeps `Install.cmd`, `README.md`, `CHANGELOG.md`, `LICENSE`, `docs/` and `.github/`.
+- Moved the runtime scripts, templates and version markers into `src/`; the repository root now keeps `Install.cmd`, `README.md`, `CHANGELOG.md`, `LICENSE` and `.github/`.
 - `Install.cmd` launches `src\install.ps1`, and the release ZIP mirrors the repository layout (`Install.cmd` plus `src/`).
 - `install.ps1` resolves `CHANGELOG.md` from the repository root and records the clone root (not `src/`) as `sourceDir`.
 - `update.ps1` looks for `src\install.ps1` and falls back to the pre-0.13.1 root location for existing install states.
 - **Upgrade note:** an existing Git clone install must run `.\src\install.ps1` once after pulling this change, because the 0.13.0 `quake-update` only looks for `install.ps1` at the clone root. ZIP installs are unaffected.
-- Updated the release workflow, `README.md` and `docs/BUGS_AND_GOTCHAS.md` §21 for the new layout.
+- Updated the release workflow and `README.md` for the new layout.
+- Removed `docs/BUGS_AND_GOTCHAS.md`; the repository now ships only the files the installer needs.
+- Purged `AGENTS.md` and `GEMINI.md` from the entire Git history — every commit, branch and tag was rewritten, so clones, release ZIPs and GitHub source archives no longer contain them. Both files stay gitignored local-only notes.
+- Release notes are now read as UTF-8 in the release workflow, so em dashes and emoji from `CHANGELOG.md` no longer arrive mangled on the release page.
+- **Upgrade note:** because the history was rewritten, an existing Git clone cannot fast-forward any more — re-clone the repository once (or install from the new ZIP) and run the installer again. ZIP installs are unaffected.
 - Bumped `VERSION` to `0.13.1`.
 
 ---

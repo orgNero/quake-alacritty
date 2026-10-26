@@ -47,7 +47,7 @@ jobs:
             exit 1
           }
 
-          $changelog = Get-Content -Path ./CHANGELOG.md -Raw
+          $changelog = Get-Content -Path ./CHANGELOG.md -Raw -Encoding UTF8
           if ($changelog -notmatch '(?m)^##\s*\[(\d+\.\d+\.\d+)\]\s*-\s*(\d{4}-\d{2}-\d{2})') {
             Write-Error "CHANGELOG.md has no dated '## [x.y.z] - yyyy-mm-dd' heading."
             exit 1
@@ -138,7 +138,7 @@ jobs:
         run: |
           $ErrorActionPreference = 'Stop'
           $version = (Get-Content -Path ./src/VERSION -Raw).Trim()
-          $changelog = Get-Content -Path ./CHANGELOG.md -Raw
+          $changelog = Get-Content -Path ./CHANGELOG.md -Raw -Encoding UTF8
 
           $pattern = "(?ms)^##\s*\[" + [regex]::Escape($version) + "\][^\r\n]*\r?\n(.*?)(?=^##\s*\[|\z)"
           $match = [regex]::Match($changelog, $pattern)
