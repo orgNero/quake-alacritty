@@ -111,6 +111,9 @@ Install.cmd -Shell wsl -KeyboardLayout us -InstallDependencies -CreateStartupSho
 > [!NOTE]
 > **Zero setup required beforehand:** Running the installer works immediately on a fresh Windows 11 machine without needing any pre-installed software—it will automatically detect, prompt for, and install all missing dependencies for you.
 
+> [!NOTE]
+> **First install that had to add Alacritty:** Windows only publishes new `PATH` entries to programs started afterwards. The installer refreshes its own environment and launches the visor with it, and the visor also checks the standard Alacritty folders, so the default `winget` install normally works right away. If `Win + §` still reports that Alacritty cannot be found, log out and back in (or restart) once, then press the shortcut again. Re-running the installer after the reboot is **not** needed.
+
 ### Option B: From a Git Clone (Development)
 
 ```powershell
@@ -363,6 +366,16 @@ The uninstaller:
 **The update notice does not appear**
 - The check runs at most once a day after a success (once an hour after a failure) and is triggered when the visor starts or is toggled. Give it a moment, then open a new pane.
 - `QUAKE_SHOW_HELP=none` suppresses the notice together with the startup tip. `quake-help` still shows a pending update without consuming the daily marker.
+
+**The first `Win + §` says Alacritty cannot be found**
+- This only affects the session in which the installer itself installed Alacritty: the already-running installer and its AutoHotkey child keep the `PATH` they inherited before Alacritty existed. The installer now refreshes `PATH` from the registry and the visor also checks `%LOCALAPPDATA%\Programs\Alacritty` and `%ProgramFiles%\Alacritty`, so a default `winget` install normally opens on the first press.
+- If it still cannot find the executable, log out or restart Windows once so the updated `PATH` reaches every process, then press the shortcut again. **Do not re-run the installer**; nothing else needs to change.
+- Alacritty in a custom or portable folder? Add the optional override under `[General]` in `%APPDATA%\alacritty\config.ini`, then reload with `Alt + Ctrl + R`:
+  ```ini
+  [General]
+  AlacrittyPath=C:\full\path\to\alacritty.exe
+  ```
+  This key is not part of the default template, so leaving it out keeps the normal resolution order (`PATH` → `%LOCALAPPDATA%\Programs\Alacritty` → `%ProgramFiles%\Alacritty`).
 
 ---
 
