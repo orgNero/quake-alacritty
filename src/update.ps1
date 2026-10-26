@@ -230,9 +230,13 @@ function Invoke-QuakeRepoUpdate {
         return 0
     }
 
-    $installer = Join-Path $SourceDir "install.ps1"
+    $installer = Join-Path $SourceDir "src\install.ps1"
     if (-not (Test-Path $installer)) {
-        Write-Host "install.ps1 was not found in the updated clone. Run the installer manually to see the details."
+        # Installs recorded before the src/ layout keep the installer at the root.
+        $installer = Join-Path $SourceDir "install.ps1"
+    }
+    if (-not (Test-Path $installer)) {
+        Write-Host "install.ps1 was not found in the updated clone (looked in src\ and the repository root). Run the installer manually to see the details."
         return 1
     }
 

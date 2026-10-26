@@ -14,3 +14,7 @@ $RECYCLE.BIN/
 # Logs & scratch
 *.log
 *.tmp
+
+# Local agent instructions (not published)
+AGENTS.md
+GEMINI.md

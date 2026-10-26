@@ -67,18 +67,20 @@ param(
     nordic | us. Only rewrites ToggleVisor when supplied.
 
 .EXAMPLE
-    .\install.ps1 -Shell wsl -KeyboardLayout us -CreateStartupShortcut
+    .\src\install.ps1 -Shell wsl -KeyboardLayout us -CreateStartupShortcut
 
 .EXAMPLE
-    .\install.ps1 -DryRun -Shell keep
+    .\src\install.ps1 -DryRun -Shell keep
 
 .EXAMPLE
-    .\install.ps1 -CheckForUpdates -PassThru
+    .\src\install.ps1 -CheckForUpdates -PassThru
 #>
 
 $ErrorActionPreference = "Stop"
 
 $SourceDir = $PSScriptRoot
+$RepoRoot = Split-Path $SourceDir -Parent
+if ([string]::IsNullOrWhiteSpace($RepoRoot)) { $RepoRoot = $SourceDir }
 $TargetDir = Join-Path $env:APPDATA "alacritty"
 $RepositoryUrl = "https://github.com/orgNero/quake-alacritty"
 $script:ConfigBackups = @{}
@@ -277,11 +279,14 @@ function Register-QuakeUninstallEntry {
 }
 
 function Test-QuakeVersionConsistency {
-    param([string]$Directory)
+    param(
+        [string]$Directory,
+        [string]$RepositoryRoot = $Directory
+    )
 
     $problems = New-Object System.Collections.Generic.List[string]
     $versionPath = Join-Path $Directory "VERSION"
-    $changelogPath = Join-Path $Directory "CHANGELOG.md"
+    $changelogPath = Join-Path $RepositoryRoot "CHANGELOG.md"
     $version = $null
 
     if (-not (Test-Path $versionPath)) {
@@ -342,7 +347,7 @@ Write-Host "=======================" -ForegroundColor DarkGray
 # Standalone modes: -VerifyVersion and -CheckForUpdates
 # -----------------------------------------------------------------------------
 if ($VerifyVersion) {
-    $verification = Test-QuakeVersionConsistency -Directory $SourceDir
+    $verification = Test-QuakeVersionConsistency -Directory $SourceDir -RepositoryRoot $RepoRoot
     if ($verification.IsValid) {
         Write-Host "`n✅ Version metadata is consistent (v$($verification.Version))." -ForegroundColor Green
         exit 0
@@ -1078,12 +1083,14 @@ $stateLayout = "keep"
 if ($layoutWasChosen) { $stateLayout = $selectedLayout }
 elseif ($installState -and $installState.layout) { $stateLayout = $installState.layout }
 
-# Record how this copy was obtained. "repo" only when $SourceDir is the git work
-# tree root itself; a ZIP extracted inside another repository must stay "zip".
+# Record how this copy was obtained. "repo" only when src/ belongs to a git
+# work tree whose root is its parent; a ZIP extracted inside another repository
+# must stay "zip". sourceDir always points at the tree root (Install.cmd/README
+# for a ZIP, the clone root for a repository), never at the src/ folder.
 $sourceType = "zip"
 $sourceDirResolved = $null
 try {
-    $sourceDirResolved = [System.IO.Path]::GetFullPath($SourceDir).TrimEnd('\')
+    $sourceDirResolved = [System.IO.Path]::GetFullPath($RepoRoot).TrimEnd('\')
     $gitTopLevel = & git -C $SourceDir rev-parse --show-toplevel 2>$null
     if ($LASTEXITCODE -eq 0 -and -not [string]::IsNullOrWhiteSpace($gitTopLevel)) {
         $gitTopResolved = [System.IO.Path]::GetFullPath(([string]$gitTopLevel).Trim()).TrimEnd('\')
@@ -1140,6 +1147,6 @@ if ($DryRun) {
 # -----------------------------------------------------------------------------
 $actionLabel = if ($isUpgrade) { "upgraded" } else { "installed" }
 Write-Host "`n✨ Quake Alacritty v$AppVersion $actionLabel!" -ForegroundColor Cyan
-Write-Host "💡 Check for newer versions anytime: .\install.ps1 -CheckForUpdates" -ForegroundColor DarkGray
+Write-Host "💡 Check for newer versions anytime: .\src\install.ps1 -CheckForUpdates" -ForegroundColor DarkGray
 Write-Host "💡 To uninstall anytime, run: powershell -File `"$TargetDir\uninstall.ps1`"" -ForegroundColor DarkGray
 Write-Host "💬 Have feedback, bugs, or feature ideas? Open an issue: $RepositoryUrl/issues`n" -ForegroundColor DarkGray

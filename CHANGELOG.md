@@ -7,6 +7,39 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.13.1] - 2026-10-26
+
+## Features
+### Major
+_None_
+
+### Minor
+_None_
+
+## Fixes
+### Major
+_None_
+
+### Minor
+_None_
+
+## Window Management & Multi-Monitor
+_None_
+
+## Styling & Appearance
+_None_
+
+## Configuration & Tooling
+- Moved the runtime scripts, templates and version markers into `src/`; the repository root now keeps `Install.cmd`, `README.md`, `CHANGELOG.md`, `LICENSE`, `docs/` and `.github/`.
+- `Install.cmd` launches `src\install.ps1`, and the release ZIP mirrors the repository layout (`Install.cmd` plus `src/`).
+- `install.ps1` resolves `CHANGELOG.md` from the repository root and records the clone root (not `src/`) as `sourceDir`.
+- `update.ps1` looks for `src\install.ps1` and falls back to the pre-0.13.1 root location for existing install states.
+- **Upgrade note:** an existing Git clone install must run `.\src\install.ps1` once after pulling this change, because the 0.13.0 `quake-update` only looks for `install.ps1` at the clone root. ZIP installs are unaffected.
+- Updated the release workflow, `README.md` and `docs/BUGS_AND_GOTCHAS.md` §21 for the new layout.
+- Bumped `VERSION` to `0.13.1`.
+
+---
+
 ## [0.13.0] - 2026-10-26
 
 ## Features
