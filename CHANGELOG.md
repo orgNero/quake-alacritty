@@ -7,7 +7,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
-## [Unreleased] - 2026-10-26
+## [0.13.2] - 2026-10-26
 
 ## Features
 ### Major
@@ -35,6 +35,7 @@ _None_
 - `install.ps1`: dependency probing, the ARP display icon and the final status message use the resolved executable instead of `Get-Command alacritty`; `PATH` is refreshed once after the winget block. `Get-QuakeAlacrittyVersion` now also reads Alacritty's redirected stdout, because PowerShell's call operator cannot capture `--version` from a GUI-subsystem executable.
 - `quake_alacritty.ahk`: added `ResolveAlacrittyExecutable`, `LaunchAlacritty` and a clear not-found dialog; no bare `Run("alacritty.exe")` remains.
 - `README.md`: documented the one-time log-out/restart case and the optional `AlacrittyPath` override.
+- Bumped `VERSION` to `0.13.2`.
 
 ---
 
