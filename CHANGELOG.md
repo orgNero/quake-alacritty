@@ -7,6 +7,33 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [Unreleased]
+
+## Features
+### Major
+_None_
+
+### Minor
+_None_
+
+## Fixes
+### Major
+_None_
+
+### Minor
+- **Uninstalling no longer strands terminal windows:** `uninstall.ps1` stopped the AutoHotkey visor and then deleted files, but nothing ever touched `alacritty.exe`. A hidden visor left invisible panes and their shells running with no manager; a visible one left orphaned panes. The uninstaller now enumerates every Alacritty pane window (hidden ones included), prints the count and titles, and asks whether to close them. The default is **leave them open** — closing a terminal can destroy unsaved shell state — and panes that ignore `WM_CLOSE` within the grace period are reported and left running rather than force-killed. `-CloseTerminals` opts in without a prompt; `-NonInteractive` keeps the leave-open default.
+
+## Window Management & Multi-Monitor
+_None_
+
+## Styling & Appearance
+_None_
+
+## Configuration & Tooling
+- **Dead "portable mode" branch removed:** `install.ps1` skipped the "Installed Apps" registration whenever the deploy target differed from `%APPDATA%\alacritty`, but the target is hardcoded to that path and there is no `-TargetDir`, so the skip could never fire. Registration now happens for every non-symlink deployment. Real portable installs would require `-TargetDir` to be threaded through install state, the uninstaller and the shortcut; that is deliberately not done here.
+
+---
+
 ## [0.13.4] - 2026-10-28
 
 ## Features
