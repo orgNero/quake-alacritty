@@ -7,7 +7,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
-## [Unreleased]
+## [0.13.4] - 2026-10-28
 
 ## Features
 ### Major
@@ -38,6 +38,7 @@ _None_
 - `src/quake_common.ps1`: `Invoke-QuakeUpdateCheck` now returns `DownloadUrl`, `ReleaseBody` and `CanAutoUpdate` alongside the version fields, resolved from the release's ZIP asset.
 - `src/install.ps1`, `src/uninstall.ps1`: named-mutex guard around the whole run.
 - `README.md`: documented ZIP self-update, the digest check and the abort/fallback behaviour under **Updating**, and added troubleshooting entries for a failed self-update.
+- Bumped `VERSION` to `0.13.4`.
 
 ---
 
