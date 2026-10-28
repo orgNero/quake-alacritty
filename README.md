@@ -31,6 +31,7 @@ Features mouse-aware multi-monitor detection, dynamic 2×2 quad grid tiling, acr
     * `left`: 1 left master pane (100% height), 2 right stacked panes (50% height each).
     * `right`: 2 left stacked panes (50% height each), 1 right master pane (100% height).
   * **4 Terminals:** Clean 2×2 quad grid (50% width & 50% height each, cyan cross seams).
+  * **5+ Terminals:** No cap and no error. The top row gets `ceil(n/2)` equal columns and the bottom row takes the remainder, so 5 panes are 3 top / 2 bottom and 7 are 4 / 3. Panes get narrow rather than spilling off-screen; close a few and the layout re-balances back to the 4-pane grid.
 * **Adjacent Cyan Dividers:** 
   * Only borders between neighboring terminals are colored (outer screen edges and desktop boundaries remain completely clean and borderless).
   * Rendered as click-through overlay bars (`+E0x20` / `WS_EX_TRANSPARENT`), so mouse selections pass directly into the terminal without interference.
@@ -38,8 +39,8 @@ Features mouse-aware multi-monitor detection, dynamic 2×2 quad grid tiling, acr
 * **Auto-Rebalancing & Transitions (`Alt + W` / `Alt + F4`):** Closing any terminal automatically collapses and re-tiles the remaining ones (supported via `Alt + W`, `Alt + F4`, or shell `exit`). Closing a stacked split preserves the remaining terminal on its half-screen column without snapping to full-width visor.
 * **Keyboard Pane Navigation (`Alt + Arrows`):** Hop typing focus between splits without touching the mouse, featuring deterministic tie-breaking across asymmetrical master layouts.
 * **Window Swapping & Rotation (`Alt + Shift + Arrows`, `Alt + Shift + Space`):** Rearrange panes on the fly by swapping with adjacent windows or rotating all positions cyclically without losing keyboard focus.
-* **In-Terminal Startup Help Hint & Cheat Sheet (`quake-help`, `quake-env`):** Displays a sleek 1-line reminder (`💡 Tip: Type 'quake-help' to view keyboard shortcuts`) on every terminal start. Configurable via `ShowHelpOnStart=tip` in `config.ini` (`tip` for sleek 1-line hint, `banner` for full 20-line table, `none` for silent startup). Running `quake-help` displays the full electric cyan quickstart cheat sheet on demand anytime, while `quake-env` inspects your setup (OS, AutoHotkey, Alacritty, displays) and copies formatted Markdown to the clipboard for rapid bug reporting.
-* **One-Word Updates (`quake-update`):** `quake-update` checks for a newer release and upgrades a Git clone in place (fast-forward pull + installer), and re-deploys when the clone is already ahead of the installed copy. ZIP installs download the release archive, verify the SHA-256 published in the release notes, and run the extracted installer. `quake-update --check` (`-Check` in PowerShell) reports the version without changing anything.
+* **In-Terminal Startup Help Hint & Cheat Sheet (`quake-help`, `quake-env`):** Displays a sleek 1-line reminder (`💡 Tip: Type 'quake-help' to view keyboard shortcuts`) on every terminal start. Configurable via `ShowHelpOnStart` in `config.ini` (`tip` for sleek 1-line hint, `banner` for full 20-line table, `none` for silent startup, `first-run` for a one-time tip after install — `FirstRun` is cleared by the first launch, whatever this setting is, so switching to `first-run` later usually shows nothing). Running `quake-help` displays the full electric cyan quickstart cheat sheet on demand anytime, while `quake-env` inspects your setup (OS, AutoHotkey, Alacritty, displays) and copies formatted Markdown to the clipboard for rapid bug reporting.
+* **One-Word Updates (`quake-update`):** `quake-update` checks for a newer release and upgrades a Git clone in place (fast-forward pull + installer), and re-deploys when the clone is already ahead of the installed copy. ZIP installs download the release archive, compare it with the SHA-256 published in the release notes when a release includes one, and run the extracted installer. `quake-update --check` (`-Check` in PowerShell) reports the version without changing anything.
 * **Once-a-Day Update Notice:** When the cached background check has seen a newer published release, terminal startup prints a single line — `⬆ Update available: vX (you have vY). Type 'quake-update'.` — at most once per calendar day. The line comes from the local cache only (no network on launch), `quake-help` shows it while an update is pending, and `QUAKE_SHOW_HELP=none` suppresses startup messages.
 * **Taskbar Awareness:** Respects custom work areas (such as left-docked taskbars) using `MonitorGetWorkArea`.
 
@@ -50,7 +51,7 @@ Features mouse-aware multi-monitor detection, dynamic 2×2 quad grid tiling, acr
 | Shortcut | Context | Description |
 | :--- | :--- | :--- |
 | **`Win + §`** | **Global** | Toggle terminal visor (shows on the monitor under the mouse cursor; hiding returns focus to the previous window) |
-| **`Alt + Enter`** | Inside Alacritty | Spawn a new split (auto-tiles into 1 → 2 → 3 → 4 layout) |
+| **`Alt + Enter`** | Inside Alacritty | Spawn a new split (auto-tiles 1 → 2 → 3 → 4; 5+ panes split into two equal rows, see above) |
 | **`Alt + W`** / **`Alt + F4`** | Inside Alacritty | Close focused split and smoothly rebalance remaining windows |
 | **`Alt + R`** | Inside Alacritty | Force re-tile / balance windows |
 | **`Alt + L`** | Inside Alacritty | Cycle pane layout mode / master orientation live |
@@ -158,7 +159,7 @@ Re-running `install.ps1` is a safe upgrade, not a reinstall. The script reads `%
 | `-UpgradeDependencies` | Print installed vs. winget-available versions, then run `winget upgrade` |
 | `-CheckForUpdates` | Advisory check against the newest **published GitHub release** (never downloads or installs) |
 | `-DryRun` | Print every planned file write, backup, shortcut, registry key and process action without applying it |
-| `-VerifyVersion` | Fail when `VERSION`, the newest `CHANGELOG.md` heading and git tags disagree |
+| `-VerifyVersion` | Repository checkouts only: fail when `VERSION`, the newest `CHANGELOG.md` heading and git tags disagree. Release ZIPs ship no `CHANGELOG.md`, so this always fails on an installed copy |
 | `-NonInteractive` | Never prompt; use defaults for anything not supplied |
 | `-PassThru` | With `-CheckForUpdates`, return a result object instead of relying on text output |
 
@@ -181,7 +182,7 @@ quake-update --check    # Git Bash: report only, change nothing
 
 - **Git clone installs** are fast-forwarded with `git pull --ff-only` and then re-deployed by the freshly pulled `install.ps1`. A dirty working tree, a detached HEAD, or a branch without an upstream stops the update with a plain message. Nothing is ever stashed, reset, or discarded automatically. A branch that lost its upstream is re-attached to `origin/<branch>` automatically when that remote-tracking branch exists.
 - **"Already on the latest version" means the deployment is current, not just the clone.** If the pull brings no new commits but the clone's `src\VERSION` is newer than the deployed copy — or the deployed copy was installed from a different commit, which is the normal case between releases — `quake-update` re-runs the installer instead of stopping. Re-deploying never touches your `alacritty.toml` or `config.ini`.
-- **ZIP installs update themselves.** `quake-update` reads the newest published release, downloads `quake-alacritty-vX.Y.Z.zip` over HTTPS, compares its SHA-256 with the digest in the release notes, extracts it to a temporary folder and runs the extracted `src\install.ps1` (configuration preserved). The temporary folder is removed afterwards, and nothing outside `%APPDATA%\alacritty` is touched.
+- **ZIP installs update themselves.** `quake-update` reads the newest published release, downloads `quake-alacritty-vX.Y.Z.zip` over HTTPS, compares its SHA-256 with the digest in the release notes (a release that publishes no digest prints a warning and continues over HTTPS), extracts it to a temporary folder and runs the extracted `src\install.ps1` (configuration preserved). The temporary folder is removed afterwards, and nothing outside `%APPDATA%\alacritty` is touched.
 - **Any failure falls back to the download link.** No connection, a missing asset, a digest mismatch, an archive whose `VERSION` disagrees with the release, or an installer that exits non-zero leaves your current install untouched and prints the manual download link instead of half-applying an update.
 - **Watch for the notice:** the once-a-day line (`⬆ Update available: vX (you have vY). Type 'quake-update'.`) is rendered from the cached result of the background check, so it never slows down or blocks a new terminal. It appears at most once per calendar day; `QUAKE_SHOW_HELP=none` hides it along with the startup tip. Run `quake-update` to apply it.
 - **The check reads published releases, not `main`.** A tag that has no GitHub release is never advertised, and the 60-requests-per-hour unauthenticated API limit is ample for a once-a-day check. If GitHub cannot be reached, the previous cached result is kept and the check retries later; failures never block terminal startup.
@@ -213,20 +214,21 @@ Located at `%APPDATA%\alacritty\config.ini` (or `src\config.ini` in the reposito
 FirstRun=true
 ; Multi-monitor visor workspace mode (isolated | hopping)
 MultiMonitorMode=isolated
-; Help command hint on terminal launch (tip | banner | none)
+; Help command hint on terminal launch (tip | banner | none | first-run)
 ShowHelpOnStart=tip
 ; Default starting directory for newly spawned terminal windows (~ or empty defaults to user profile directory)
 StartingDirectory=~
 
 [Appearance]
-; Seam divider thickness in pixels (1-5px)
+; Seam divider thickness in pixels (0-10; 0 removes the seam entirely)
 BorderGap=2
 
 ; Seam divider hex RGB color (without # prefix)
 ; Electric Cyan: 38bdf8 | One Dark Cyan: 56b6c2 | Purple: c678dd | Gray: 3e4452
 BorderColor=38bdf8
 
-; Visor height coverage percentage for the top visor row (20-90)
+; Visor height coverage percentage for the top visor row (10-100)
+; 10 is a thin strip; 100 covers the whole work area and hides everything behind it.
 VisorHeightPercent=40
 
 ; 3-pane master orientation layout mode (bottom | top | left | right)
@@ -245,6 +247,8 @@ TileLayout=bottom
 TwoPaneLayout=side-by-side-visor
 
 [Hotkeys]
+; Values are AutoHotkey key strings. Anything after a ';' on the same line is
+; ignored, so keep comments on their own line (the installer writes them that way).
 ; Global toggle hotkey (shows / hides visor on monitor under mouse cursor)
 ; #sc029 is Win + § (the key directly under Escape on Swedish/Nordic keyboards)
 ToggleVisor=#sc029
@@ -278,6 +282,9 @@ ReloadScript=!^r
 
 > [!TIP]
 > After saving changes in `config.ini`, press **`Alt + Ctrl + R`** while inside Alacritty to instantly reload settings without restarting the terminal!
+
+> [!NOTE]
+> Out-of-range or unrecognized values are not silently replaced. A bad `BorderGap`, `VisorHeightPercent`, `MultiMonitorMode` or `ShowHelpOnStart` value is reported in a dialog at startup and stays reachable from the tray menu under **Config warnings**; the rest of the file still loads. Hotkey values may carry a trailing `; comment` — text after the first `;` is ignored. A hotkey string that is still invalid after that binds nothing, and reporting failed bindings is planned with the config log.
 
 ### Adjusting Opacity & Blur
 Edit [`alacritty.toml`](src/alacritty.toml):
@@ -409,7 +416,7 @@ The uninstaller:
 - **`%APPDATA%\alacritty\.update-check.json`** — cached result of the throttled background update check (`installedVersion`, `latestVersion`, `checkedAtUtc`, `nextCheckAtUtc`, `lastError`). Read by the terminal notice; never used as a version source of truth.
 - **`%APPDATA%\alacritty\.update-notice`** — the local date (`yyyyMMdd`) of the last automatic update notice, so it shows at most once per day. Written only by the startup path.
 - The AutoHotkey tray tooltip/menu and the `quake-help` cheat sheet read `VERSION` at runtime instead of embedding constants.
-- Run `.\src\install.ps1 -VerifyVersion` to assert that `VERSION` and the newest `CHANGELOG.md` heading agree (and the nearest git tag, once tags exist).
+- Run `.\src\install.ps1 -VerifyVersion` **in a repository checkout** to assert that `VERSION` and the newest `CHANGELOG.md` heading agree (and the nearest git tag, once tags exist). Release ZIPs deliberately exclude `CHANGELOG.md`, so this check cannot pass on an installed copy.
 
 ---
 

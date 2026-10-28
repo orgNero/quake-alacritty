@@ -7,6 +7,35 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [Unreleased]
+
+## Features
+### Major
+_None_
+
+### Minor
+_None_
+
+## Fixes
+### Major
+_None_
+
+### Minor
+- **A hotkey value with a trailing `; comment` now binds:** `IniRead` wraps `GetPrivateProfileString`, which keeps inline `;` text, so a hand-edited `ToggleVisor=#sc029 ; my note` reached `Hotkey()` as one unparseable string and the binding silently failed (the default install hid this, because the value the installer wrote matched the hardcoded fallback). Every hotkey read is now trimmed and cut at the first `;`, which is safe because an AutoHotkey hotkey string can never contain one.
+- **Rejected config values are reported instead of silently dropped:** out-of-range `BorderGap` (0-10) or `VisorHeightPercent` (10-100), an unknown `MultiMonitorMode` or `ShowHelpOnStart`, and non-numeric values now produce a startup dialog and a **Config warnings** tray entry instead of quietly falling back to a default. `BorderGap=abc` previously threw inside the `[Appearance]` `try` block and discarded `BorderColor`, the visor height and both layout keys with it; the reads are now type-checked per key.
+
+## Window Management & Multi-Monitor
+_None_
+
+## Styling & Appearance
+_None_
+
+## Configuration & Tooling
+- **The installer writes `config.ini` in the shape the template uses:** the keyboard-layout note above `ToggleVisor` is its own comment line instead of trailing the value, and inline comments on any `[Hotkeys]` value are moved above the key once, idempotently, including the layout note from a previous install.
+- **Code and docs now agree on every bound:** `config.ini` and the README sample document `BorderGap` 0-10 and `VisorHeightPercent` 10-100 (the ranges the code has always accepted), `ShowHelpOnStart=first-run` is documented including its one-shot behaviour (`FirstRun` is consumed by the first launch whether or not the mode is active), `-VerifyVersion` is marked repository-only because release ZIPs ship no `CHANGELOG.md`, the ZIP update wording no longer promises a digest check for releases that publish none, and `1 → 2 → 3 → 4` no longer reads as a pane limit — 5+ panes are documented as two equal rows (`ceil(n/2)` on top).
+
+---
+
 ## [0.13.4] - 2026-10-28
 
 ## Features

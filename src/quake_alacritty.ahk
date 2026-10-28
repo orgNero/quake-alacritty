@@ -69,11 +69,16 @@ global g_VisorReturnHwnd       := 0
 ; In-memory debounce for the background update check (not a session-wide lock)
 global g_LastUpdateCheckSpawn  := 0
 
+; Config values that were rejected on read. Reported once at startup and kept for
+; the Config Reliability log (slice B) instead of being silently replaced.
+global g_ConfigWarnings        := []
+
 ; Helper: Resolves configuration file location and loads user preferences
 LoadConfig()
 {
     global g_ConfigFile, g_BorderGap, g_BorderColor, g_VisorHeightPercent, g_MultiMonitorMode, g_ShowHelpOnStart, g_FirstRun, g_StartingDirectory
     global g_AlacrittyConfiguredPath
+    global g_ConfigWarnings
     global g_TileLayout, g_TwoPaneLayout, g_KeyCycleLayout
     global g_KeyToggleVisor, g_KeySplit, g_KeyClose, g_KeyRetile
     global g_KeyFocusLeft, g_KeyFocusRight, g_KeyFocusUp, g_KeyFocusDown
@@ -102,7 +107,11 @@ LoadConfig()
         if (modeVal == "hopping" || modeVal == "isolated")
             g_MultiMonitorMode := modeVal
         else
+        {
+            if (modeVal != "")
+                AddConfigWarning("MultiMonitorMode=" . modeVal . " is not isolated|hopping; using isolated.")
             g_MultiMonitorMode := "isolated"
+        }
 
         helpVal := Trim(StrLower(IniRead(g_ConfigFile, "General", "ShowHelpOnStart", "tip")))
         if (helpVal == "tip" || helpVal == "banner" || helpVal == "none" || helpVal == "first-run")
@@ -112,7 +121,10 @@ LoadConfig()
         else if (helpVal == "false" || helpVal == "0")
             g_ShowHelpOnStart := "none"
         else
+        {
+            AddConfigWarning("ShowHelpOnStart=" . helpVal . " is not tip|banner|none|first-run; using tip.")
             g_ShowHelpOnStart := "tip"
+        }
 
         startDirVal := Trim(IniRead(g_ConfigFile, "General", "StartingDirectory", "~"))
         g_StartingDirectory := (startDirVal != "") ? startDirVal : "~"
@@ -125,17 +137,25 @@ LoadConfig()
 
     ; 3. [Appearance]
     try {
-        gapVal := Integer(IniRead(g_ConfigFile, "Appearance", "BorderGap", "2"))
+        ; IsInteger first: Integer("abc") would throw and abort the rest of this
+        ; section, silently dropping BorderColor, the visor height and the layouts.
+        gapRaw := Trim(IniRead(g_ConfigFile, "Appearance", "BorderGap", "2"))
+        gapVal := IsInteger(gapRaw) ? Integer(gapRaw) : -1
         if (gapVal >= 0 && gapVal <= 10)
             g_BorderGap := gapVal
+        else
+            AddConfigWarning("BorderGap=" . gapRaw . " is not an integer in 0-10; using " . g_BorderGap . ".")
 
         colVal := Trim(IniRead(g_ConfigFile, "Appearance", "BorderColor", "38bdf8"))
         if (colVal != "")
             g_BorderColor := StrReplace(colVal, "#", "")
 
-        vhVal := Integer(IniRead(g_ConfigFile, "Appearance", "VisorHeightPercent", "40"))
+        vhRaw := Trim(IniRead(g_ConfigFile, "Appearance", "VisorHeightPercent", "40"))
+        vhVal := IsInteger(vhRaw) ? Integer(vhRaw) : -1
         if (vhVal >= 10 && vhVal <= 100)
             g_VisorHeightPercent := vhVal / 100.0
+        else
+            AddConfigWarning("VisorHeightPercent=" . vhRaw . " is not an integer in 10-100; using " . Round(g_VisorHeightPercent * 100) . ".")
 
         tlVal := Trim(StrLower(IniRead(g_ConfigFile, "Appearance", "TileLayout", "bottom")))
         if (tlVal == "bottom" || tlVal == "top" || tlVal == "left" || tlVal == "right")
@@ -148,24 +168,61 @@ LoadConfig()
 
     ; 4. [Hotkeys]
     try {
-        g_KeyToggleVisor := IniRead(g_ConfigFile, "Hotkeys", "ToggleVisor", g_KeyToggleVisor)
-        g_KeySplit       := IniRead(g_ConfigFile, "Hotkeys", "SplitWindow", g_KeySplit)
-        g_KeyClose       := IniRead(g_ConfigFile, "Hotkeys", "CloseWindow", g_KeyClose)
-        g_KeyRetile      := IniRead(g_ConfigFile, "Hotkeys", "Retile", g_KeyRetile)
-        g_KeyCycleLayout := IniRead(g_ConfigFile, "Hotkeys", "CycleLayout", g_KeyCycleLayout)
-        g_KeyFocusLeft   := IniRead(g_ConfigFile, "Hotkeys", "FocusLeft", g_KeyFocusLeft)
-        g_KeyFocusRight  := IniRead(g_ConfigFile, "Hotkeys", "FocusRight", g_KeyFocusRight)
-        g_KeyFocusUp     := IniRead(g_ConfigFile, "Hotkeys", "FocusUp", g_KeyFocusUp)
-        g_KeyFocusDown   := IniRead(g_ConfigFile, "Hotkeys", "FocusDown", g_KeyFocusDown)
-        g_KeySwapLeft    := IniRead(g_ConfigFile, "Hotkeys", "SwapLeft", g_KeySwapLeft)
-        g_KeySwapRight   := IniRead(g_ConfigFile, "Hotkeys", "SwapRight", g_KeySwapRight)
-        g_KeySwapUp      := IniRead(g_ConfigFile, "Hotkeys", "SwapUp", g_KeySwapUp)
-        g_KeySwapDown    := IniRead(g_ConfigFile, "Hotkeys", "SwapDown", g_KeySwapDown)
-        g_KeyRotate         := IniRead(g_ConfigFile, "Hotkeys", "RotatePanes", g_KeyRotate)
-        g_KeyMoveVisorLeft  := IniRead(g_ConfigFile, "Hotkeys", "MoveVisorLeft", g_KeyMoveVisorLeft)
-        g_KeyMoveVisorRight := IniRead(g_ConfigFile, "Hotkeys", "MoveVisorRight", g_KeyMoveVisorRight)
-        g_KeyReload      := IniRead(g_ConfigFile, "Hotkeys", "ReloadScript", g_KeyReload)
+        g_KeyToggleVisor := NormalizeHotkey(IniRead(g_ConfigFile, "Hotkeys", "ToggleVisor", g_KeyToggleVisor))
+        g_KeySplit       := NormalizeHotkey(IniRead(g_ConfigFile, "Hotkeys", "SplitWindow", g_KeySplit))
+        g_KeyClose       := NormalizeHotkey(IniRead(g_ConfigFile, "Hotkeys", "CloseWindow", g_KeyClose))
+        g_KeyRetile      := NormalizeHotkey(IniRead(g_ConfigFile, "Hotkeys", "Retile", g_KeyRetile))
+        g_KeyCycleLayout := NormalizeHotkey(IniRead(g_ConfigFile, "Hotkeys", "CycleLayout", g_KeyCycleLayout))
+        g_KeyFocusLeft   := NormalizeHotkey(IniRead(g_ConfigFile, "Hotkeys", "FocusLeft", g_KeyFocusLeft))
+        g_KeyFocusRight  := NormalizeHotkey(IniRead(g_ConfigFile, "Hotkeys", "FocusRight", g_KeyFocusRight))
+        g_KeyFocusUp     := NormalizeHotkey(IniRead(g_ConfigFile, "Hotkeys", "FocusUp", g_KeyFocusUp))
+        g_KeyFocusDown   := NormalizeHotkey(IniRead(g_ConfigFile, "Hotkeys", "FocusDown", g_KeyFocusDown))
+        g_KeySwapLeft    := NormalizeHotkey(IniRead(g_ConfigFile, "Hotkeys", "SwapLeft", g_KeySwapLeft))
+        g_KeySwapRight   := NormalizeHotkey(IniRead(g_ConfigFile, "Hotkeys", "SwapRight", g_KeySwapRight))
+        g_KeySwapUp      := NormalizeHotkey(IniRead(g_ConfigFile, "Hotkeys", "SwapUp", g_KeySwapUp))
+        g_KeySwapDown    := NormalizeHotkey(IniRead(g_ConfigFile, "Hotkeys", "SwapDown", g_KeySwapDown))
+        g_KeyRotate         := NormalizeHotkey(IniRead(g_ConfigFile, "Hotkeys", "RotatePanes", g_KeyRotate))
+        g_KeyMoveVisorLeft  := NormalizeHotkey(IniRead(g_ConfigFile, "Hotkeys", "MoveVisorLeft", g_KeyMoveVisorLeft))
+        g_KeyMoveVisorRight := NormalizeHotkey(IniRead(g_ConfigFile, "Hotkeys", "MoveVisorRight", g_KeyMoveVisorRight))
+        g_KeyReload      := NormalizeHotkey(IniRead(g_ConfigFile, "Hotkeys", "ReloadScript", g_KeyReload))
     }
+}
+
+; Helper: cleans a configured hotkey before it reaches Hotkey(). IniRead uses
+; GetPrivateProfileString, which keeps inline "; comments", and an AHK hotkey
+; string can never contain ';' - so cutting at the first one is safe. Whitespace
+; is trimmed so "!w " and " !w" bind like "!w".
+NormalizeHotkey(value)
+{
+    text := Trim(value)
+    commentAt := InStr(text, ";")
+    if (commentAt)
+        text := Trim(SubStr(text, 1, commentAt - 1))
+    return text
+}
+
+; Helper: records a rejected config value instead of silently substituting a
+; default. Kept as data so the slice B log can write the same list verbatim.
+AddConfigWarning(message)
+{
+    global g_ConfigWarnings
+    g_ConfigWarnings.Push(message)
+}
+
+; Shows every collected config problem. Until quake.log exists (Config Reliability
+; slice B) this dialog and the tray entry are the only reliable surfaces, because
+; TrayTip is dropped whenever Windows notifications are off.
+ShowConfigWarnings()
+{
+    global g_ConfigWarnings
+    if (!g_ConfigWarnings.Length)
+        return
+
+    text := "Quake Alacritty found " . g_ConfigWarnings.Length . " problem(s) in config.ini:`n`n"
+    for warning in g_ConfigWarnings
+        text .= "- " . warning . "`n"
+    text .= "`nFix the values, then use Tray -> Reload (or restart)."
+    MsgBox(text, "Quake Alacritty config", "Icon!")
 }
 
 ; Helper: Binds dynamic hotkeys from configuration
@@ -2705,6 +2762,7 @@ WatchdogCheck()
 ; Configures the system notification area (tray) context menu
 SetupTrayMenu()
 {
+    global g_ConfigWarnings
     tray := A_TrayMenu
     tray.Delete()
     tray.Add("Quake Alacritty v" . g_AppVersion, (*) => Run("https://github.com/orgNero/quake-alacritty"))
@@ -2712,6 +2770,11 @@ SetupTrayMenu()
     tray.Add()
     tray.Add("Report Bug / Request Feature", (*) => Run("https://github.com/orgNero/quake-alacritty/issues/new/choose"))
     tray.Add("Documentation & Shortcuts", (*) => Run("https://github.com/orgNero/quake-alacritty#readme"))
+    if (g_ConfigWarnings.Length)
+    {
+        tray.Add()
+        tray.Add("Config warnings (" . g_ConfigWarnings.Length . ")", (*) => ShowConfigWarnings())
+    }
     tray.Add()
     tray.Add("Reload Quake Alacritty", (*) => Reload())
     tray.Add("Exit", (*) => ExitApp())
@@ -2802,6 +2865,11 @@ OnMessage(0x0010, OnCloseMessage)
 OnExit(CleanupOnExit)
 A_IconTip := "Quake Alacritty v" . g_AppVersion
 SetupTrayMenu()
+
+; Report rejected config values once per start. Silence on a valid config; the
+; tray keeps a "Config warnings" entry so the list stays reachable afterwards.
+if (g_ConfigWarnings.Length)
+    ShowConfigWarnings()
 
 ; Sync any existing windows and restore layout if already visible on startup/reload
 SyncMonitorWindows()

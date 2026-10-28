@@ -140,6 +140,49 @@ function Write-QuakeTextFile {
     [System.IO.File]::WriteAllText($Path, $Content, (New-Object System.Text.UTF8Encoding($useBom)))
 }
 
+# Normalizes the [Hotkeys] section so generated and migrated files match
+# src\config.ini: comments on their own line, values with no inline "; text".
+# AHK now strips the comment at read time, so this is presentation rather than
+# correctness - but a file that still carries the old shape looks like it should
+# work and hides what the effective binding is. Idempotent: output has no inline
+# comments left to move.
+function Convert-QuakeHotkeyComments {
+    param([string]$Content)
+
+    if ([string]::IsNullOrEmpty($Content)) { return $Content }
+
+    $eol = if ($Content -match "`r`n") { "`r`n" } else { "`n" }
+    $lines = $Content -split "\r?\n"
+    $output = New-Object System.Collections.Generic.List[string]
+    $inHotkeys = $false
+
+    foreach ($line in $lines) {
+        if ($line -match '^\s*\[([^\]]+)\]\s*$') {
+            $inHotkeys = ($matches[1].Trim() -ieq "Hotkeys")
+            $output.Add($line)
+            continue
+        }
+
+        # Only the [Hotkeys] section: values in other sections may legitimately
+        # contain ';' (paths, colors with odd comments), and are left untouched.
+        if ($inHotkeys -and $line -match '^(\s*)([^;#=\s][^=]*?)\s*=\s*(.*?)\s*;\s*(.+?)\s*$') {
+            $indent = $matches[1]
+            $name   = $matches[2]
+            $value  = $matches[3]
+            $note   = $matches[4]
+            if ($value) {
+                $output.Add("$indent; $note")
+                $output.Add("$indent$name=$value")
+                continue
+            }
+        }
+
+        $output.Add($line)
+    }
+
+    return ($output -join $eol)
+}
+
 function Backup-QuakeConfigOnce {
     param(
         [string]$Path,
@@ -921,20 +964,24 @@ if ($shellWasChosen -and ($selectedShell -ne "keep")) {
 
 if (Test-Path $destIni) {
     $iniContent = [System.IO.File]::ReadAllText($destIni)
-    $updatedIni = $iniContent
+    $iniEol = if ($iniContent -match "`r`n") { "`r`n" } else { "`n" }
+    $updatedIni = Convert-QuakeHotkeyComments -Content $iniContent
 
     # Note: In AutoHotkey, scan code sc029 is the key directly below Esc on both Swedish (§) and US (`).
     if ($layoutWasChosen) {
-        $toggleValue = if ($selectedLayout -eq "us") {
-            'ToggleVisor=#sc029 ; Win + backtick (key below Esc on US ANSI)'
+        $layoutNote = if ($selectedLayout -eq "us") {
+            '; Win + backtick (key below Esc on US ANSI)'
         } else {
-            'ToggleVisor=#sc029 ; Win + § (key below Esc on Swedish ISO)'
+            '; Win + § (key below Esc on Swedish ISO)'
         }
+        $toggleBlock = $layoutNote + $iniEol + 'ToggleVisor=#sc029'
+
         if ($updatedIni -match '(?m)^\s*ToggleVisor=') {
-            $updatedIni = $updatedIni -replace '(?m)^\s*ToggleVisor=.*$', $toggleValue
+            # Consume the layout note we wrote last time (or the one shipped in the
+            # template) together with the key line, so re-running cannot stack notes.
+            $updatedIni = $updatedIni -replace '(?m)^(?:;[ \t]*(?:Win \+|#sc029 is Win \+)[^\r\n]*\r?\n)?[ \t]*ToggleVisor=[^\r\n]*', $toggleBlock
         } else {
-            $iniEol = if ($iniContent -match "`r`n") { "`r`n" } else { "`n" }
-            $updatedIni = $updatedIni.TrimEnd() + $iniEol + $iniEol + "[Hotkeys]" + $iniEol + $toggleValue + $iniEol
+            $updatedIni = $updatedIni.TrimEnd() + $iniEol + $iniEol + "[Hotkeys]" + $iniEol + $toggleBlock + $iniEol
         }
     }
 
