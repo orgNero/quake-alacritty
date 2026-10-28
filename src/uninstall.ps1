@@ -103,9 +103,13 @@ if ($stopped -gt 0) {
 # are orphaned. Never force-kill here - a pane may hold unsaved shell state.
 Write-Host "`n🪟 Checking for running Alacritty panes..." -ForegroundColor Yellow
 $terminalWindows = @()
+$untargetable = @()
 if (Get-Command Get-QuakeTerminalWindows -ErrorAction SilentlyContinue) {
     try {
         $terminalWindows = @(Get-QuakeTerminalWindows)
+        if (Get-Command Get-QuakeUntargetableTerminalProcesses -ErrorAction SilentlyContinue) {
+            $untargetable = @(Get-QuakeUntargetableTerminalProcesses)
+        }
     } catch {
         Write-Warning "  Could not enumerate Alacritty windows: $_"
     }
@@ -120,17 +124,29 @@ if (Get-Command Get-QuakeTerminalWindows -ErrorAction SilentlyContinue) {
     }
 }
 
-if ($terminalWindows.Count -eq 0) {
+if ($terminalWindows.Count -eq 0 -and $untargetable.Count -eq 0) {
     Write-Host "  No running Alacritty panes found." -ForegroundColor Gray
 } else {
-    Write-Host "  $($terminalWindows.Count) Alacritty pane(s) are still running:" -ForegroundColor Cyan
+    if ($terminalWindows.Count -eq 1) {
+        Write-Host "  1 Alacritty pane is still running:" -ForegroundColor Cyan
+    } elseif ($terminalWindows.Count -gt 1) {
+        Write-Host "  $($terminalWindows.Count) Alacritty panes are still running:" -ForegroundColor Cyan
+    }
     foreach ($window in $terminalWindows) {
         $hiddenNote = if ($window.Visible) { "" } else { "  (hidden)" }
         Write-Host "    - $($window.Title)$hiddenNote" -ForegroundColor DarkGray
     }
 
+    if ($untargetable.Count -gt 0) {
+        Write-Host "  $($untargetable.Count) alacritty.exe process(es) have no terminal window and cannot be asked to close:" -ForegroundColor Yellow
+        foreach ($process in $untargetable) {
+            Write-Host "    - $($process.Name).exe (PID $($process.ProcessId))" -ForegroundColor DarkGray
+        }
+        Write-Host "  They are left alone; close them from Task Manager if you want them gone." -ForegroundColor Gray
+    }
+
     $shouldCloseTerminals = [bool]$CloseTerminals
-    if (-not $shouldCloseTerminals -and -not $NonInteractive -and [Environment]::UserInteractive) {
+    if ($terminalWindows.Count -gt 0 -and -not $shouldCloseTerminals -and -not $NonInteractive -and [Environment]::UserInteractive) {
         Write-Host "  Their shells keep running after uninstall, hidden panes included." -ForegroundColor DarkGray
         $response = Read-Host "  Close these panes gracefully? (y/N) [default: N]"
         if ($response -match '^(y|yes)$') { $shouldCloseTerminals = $true }
@@ -139,7 +155,9 @@ if ($terminalWindows.Count -eq 0) {
     if ($shouldCloseTerminals) {
         $closeable = @($terminalWindows | Where-Object { $_.Handle })
         if ($closeable.Count -eq 0) {
-            Write-Warning "  quake_common.ps1 is unavailable, so panes cannot be closed gracefully; leaving them open."
+            if ($terminalWindows.Count -gt 0) {
+                Write-Warning "  quake_common.ps1 is unavailable, so panes cannot be closed gracefully; leaving them open."
+            }
         } else {
             $survivors = @(Close-QuakeTerminalWindows -Windows $closeable)
             $closed = $closeable.Count - $survivors.Count
@@ -153,9 +171,36 @@ if ($terminalWindows.Count -eq 0) {
                 }
                 Write-Host "  They may be waiting on a command or a save prompt; close them yourself if you want them gone." -ForegroundColor Gray
             }
+
+            # Never claim a clean teardown while alacritty.exe is still alive. Anything
+            # still running here had no window to post WM_CLOSE to (crashed, hung, or
+            # still starting), so it is named instead of silently stranded. Give the
+            # process a moment to finish exiting once its window is gone.
+            $leftover = @()
+            $settleDeadline = (Get-Date).AddMilliseconds(1500)
+            while ($true) {
+                $leftover = @(Get-Process -Name 'alacritty' -ErrorAction SilentlyContinue)
+                if ($leftover.Count -eq 0 -or (Get-Date) -ge $settleDeadline) { break }
+                Start-Sleep -Milliseconds 100
+            }
+            # Processes without a pane window were already named above; only new
+            # survivors need reporting here.
+            $alreadyNamed = @($untargetable | ForEach-Object { $_.ProcessId })
+            $leftover = @($leftover | Where-Object { $alreadyNamed -notcontains $_.Id })
+            if ($leftover.Count -gt 0) {
+                Write-Host "  $($leftover.Count) alacritty.exe process(es) are still running and could not be closed gracefully:" -ForegroundColor Yellow
+                foreach ($process in $leftover) {
+                    Write-Host "    - alacritty.exe (PID $($process.Id))" -ForegroundColor DarkGray
+                }
+                Write-Host "  Close them from Task Manager if you want them gone." -ForegroundColor Gray
+            }
         }
     } else {
-        Write-Host "  Leaving $($terminalWindows.Count) pane(s) open. Close them from the taskbar when you are done." -ForegroundColor Cyan
+        if ($terminalWindows.Count -gt 0) {
+            Write-Host "  Leaving $($terminalWindows.Count) pane(s) open. Close them from the taskbar when you are done." -ForegroundColor Cyan
+        } else {
+            Write-Host "  Nothing to close; no pane windows remain." -ForegroundColor Cyan
+        }
     }
 }
 

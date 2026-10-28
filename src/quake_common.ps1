@@ -385,6 +385,57 @@ public static class QuakeWindowTools
     [DllImport("user32.dll", CharSet = CharSet.Unicode)]
     private static extern int GetWindowText(IntPtr hWnd, StringBuilder lpString, int nMaxCount);
 
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    private static extern int GetClassName(IntPtr hWnd, StringBuilder lpClassName, int nMaxCount);
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr GetWindow(IntPtr hWnd, uint uCmd);
+
+    [DllImport("user32.dll")]
+    private static extern bool IsWindow(IntPtr hWnd);
+
+    // GetWindowLongPtrW only exists in 64-bit user32; 32-bit hosts must call GetWindowLongW.
+    [DllImport("user32.dll", EntryPoint = "GetWindowLongPtrW")]
+    private static extern IntPtr GetWindowLongPtr64(IntPtr hWnd, int nIndex);
+
+    [DllImport("user32.dll", EntryPoint = "GetWindowLongW")]
+    private static extern int GetWindowLong32(IntPtr hWnd, int nIndex);
+
+    private const int GWL_EXSTYLE = -20;
+    private const uint GW_OWNER = 4;
+    private const long WS_EX_TOOLWINDOW = 0x80;
+
+    // Alacritty's real terminal window. Must stay in sync with GetAlacrittyWindows in
+    // quake_alacritty.ahk, which applies the same three tests.
+    private const string AlacrittyPaneClass = "Window Class";
+
+    private static long GetExStyle(IntPtr hWnd)
+    {
+        if (IntPtr.Size == 8) { return GetWindowLongPtr64(hWnd, GWL_EXSTYLE).ToInt64(); }
+        return (long)GetWindowLong32(hWnd, GWL_EXSTYLE);
+    }
+
+    // A pane window has class "Window Class", is not a tool window and has no owner.
+    // The title is deliberately not part of this test: Alacritty derives it from shell
+    // escape sequences, so a pane can legitimately be untitled (cmd, a fresh PowerShell
+    // pane, a shell that clears it). IME/framework helpers ("MSCTFIME UI",
+    // "Default IME", "CiceroUIWndFrame") are titled but are not panes.
+    public static bool IsPaneWindow(long handle)
+    {
+        IntPtr hWnd = new IntPtr(handle);
+        StringBuilder className = new StringBuilder(256);
+        if (GetClassName(hWnd, className, className.Capacity) <= 0) { return false; }
+        if (className.ToString() != AlacrittyPaneClass) { return false; }
+        if ((GetExStyle(hWnd) & WS_EX_TOOLWINDOW) != 0) { return false; }
+        if (GetWindow(hWnd, GW_OWNER) != IntPtr.Zero) { return false; }
+        return true;
+    }
+
+    public static bool IsWindowAlive(long handle)
+    {
+        return IsWindow(new IntPtr(handle));
+    }
+
     // Posts WM_CLOSE to every top-level window owned by the process. Deliberately no
     // title or visibility filter: AutoHotkey's message window is hidden and untitled,
     // and closing it is what lets OnExit clean up the seam overlays.
@@ -408,9 +459,9 @@ public static class QuakeWindowTools
         return posted;
     }
 
-    // Titled top-level windows, visible or not: one per Alacritty pane, including the
-    // panes the visor has hidden from the desktop.
-    public static long[] GetTitledWindows(int processId)
+    // Pane windows of the process, visible or hidden. Hidden panes keep their window
+    // (the visor calls WinHide), so enumeration must not filter on visibility.
+    public static long[] GetPaneWindows(int processId)
     {
         List<long> handles = new List<long>();
         uint target = (uint)processId;
@@ -418,7 +469,7 @@ public static class QuakeWindowTools
         {
             uint pid;
             GetWindowThreadProcessId(hWnd, out pid);
-            if (pid == target && GetWindowTextLength(hWnd) > 0)
+            if (pid == target && IsPaneWindow(hWnd.ToInt64()))
             {
                 handles.Add(hWnd.ToInt64());
             }
@@ -455,8 +506,9 @@ function Initialize-QuakeWindowTools {
     }
 }
 
-# Returns one object per running Alacritty pane window. Hidden panes have no taskbar
-# entry, so the uninstaller has to name them explicitly to be honest about what lives.
+# Returns one object per running Alacritty pane window. Hidden panes keep their window,
+# so they are included. Panes are identified by window class, not by title: a pane whose
+# shell never sets a title would otherwise be invisible here and survive teardown.
 function Get-QuakeTerminalWindows {
     [CmdletBinding()]
     param()
@@ -468,9 +520,9 @@ function Get-QuakeTerminalWindows {
 
     $results = New-Object System.Collections.Generic.List[object]
     foreach ($process in $processes) {
-        foreach ($handle in [QuakeWindowTools]::GetTitledWindows($process.Id)) {
+        foreach ($handle in [QuakeWindowTools]::GetPaneWindows($process.Id)) {
             $title = [QuakeWindowTools]::GetTitle($handle)
-            if ([string]::IsNullOrWhiteSpace($title)) { $title = "Alacritty" }
+            if ([string]::IsNullOrWhiteSpace($title)) { $title = "Alacritty pane" }
             $results.Add([pscustomobject]@{
                 ProcessId = $process.Id
                 Handle    = $handle
@@ -484,8 +536,31 @@ function Get-QuakeTerminalWindows {
     return $results.ToArray()
 }
 
+# Running alacritty.exe processes that own no pane window at all. Nothing can be posted
+# to a process without a window, so these can only be reported, never closed gracefully.
+function Get-QuakeUntargetableTerminalProcesses {
+    [CmdletBinding()]
+    param()
+
+    $processes = @(Get-Process -Name 'alacritty' -ErrorAction SilentlyContinue)
+    if ($processes.Count -eq 0) { return @() }
+
+    $windowedIds = @(Get-QuakeTerminalWindows | ForEach-Object { $_.ProcessId } | Sort-Object -Unique)
+    $untargetable = @($processes | Where-Object { $windowedIds -notcontains $_.Id })
+    if ($untargetable.Count -eq 0) { return @() }
+
+    return @($untargetable | ForEach-Object {
+        [pscustomobject]@{
+            ProcessId = $_.Id
+            Name      = $_.ProcessName
+        }
+    })
+}
+
 # Asks each pane window to close, waits, and returns the windows still alive. Never
 # force-kills: a pane may be holding unsaved shell state or a confirmation prompt.
+# Survivors are tested by window handle, not by process, so a pane that closed while its
+# process is still tearing down is not reported as a failed close.
 function Close-QuakeTerminalWindows {
     [CmdletBinding()]
     param(
@@ -503,12 +578,12 @@ function Close-QuakeTerminalWindows {
 
     $deadline = (Get-Date).AddMilliseconds($GracePeriodMs)
     while ((Get-Date) -lt $deadline) {
-        $alive = @($open | Where-Object { Get-Process -Id $_.ProcessId -ErrorAction SilentlyContinue })
+        $alive = @($open | Where-Object { [QuakeWindowTools]::IsWindowAlive([long]$_.Handle) })
         if ($alive.Count -eq 0) { break }
         Start-Sleep -Milliseconds 100
     }
 
-    return @($open | Where-Object { Get-Process -Id $_.ProcessId -ErrorAction SilentlyContinue })
+    return @($open | Where-Object { [QuakeWindowTools]::IsWindowAlive([long]$_.Handle) })
 }
 
 # Stops Quake Alacritty AutoHotkey instances. Posts WM_CLOSE to the process windows

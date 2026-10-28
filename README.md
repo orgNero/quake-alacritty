@@ -334,7 +334,7 @@ powershell -ExecutionPolicy Bypass -File "$env:APPDATA\alacritty\uninstall.ps1"
 
 The uninstaller:
 - Requests a graceful shutdown of the running AutoHotkey visor process (force-kill only as a fallback) so seam overlays are cleaned up. This stops the manager, **not your terminals**.
-- Lists any Alacritty panes that are still running — hidden ones are marked `(hidden)` — and asks whether to close them gracefully. The default is to **leave them open**, because closing a terminal can discard a running command. Panes that do not exit within the grace period are reported and left running, never force-killed. `-NonInteractive` leaves them open; `-CloseTerminals` closes them without prompting.
+- Lists any Alacritty panes that are still running — hidden ones are marked `(hidden)` — and asks whether to close them gracefully. Panes are found by Alacritty's window class, so an untitled pane (a shell that never sets a window title, such as a fresh `cmd` or PowerShell pane) is still found and closed. The default is to **leave them open**, because closing a terminal can discard a running command. Panes that do not exit within the grace period are reported and left running, never force-killed, and any `alacritty.exe` process that is still alive when the teardown finishes — including one with no window at all — is named instead of being left behind silently. `-NonInteractive` leaves them open; `-CloseTerminals` closes them without prompting.
 - Removes the Windows Startup shortcut.
 - Removes the per-user "Installed Apps" registry entry (`HKCU\Software\Microsoft\Windows\CurrentVersion\Uninstall\QuakeAlacritty`).
 - Cleans up the `quake-help`, `quake-env` and `quake-update` commands from your PowerShell `$PROFILE` and Git Bash `~/.bashrc`.
