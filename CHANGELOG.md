@@ -7,6 +7,33 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [Unreleased]
+
+## Features
+### Major
+_None_
+
+### Minor
+_None_
+
+## Fixes
+### Major
+_None_
+
+### Minor
+- **A pane exiting in a background visor no longer steals focus:** `WatchdogCheck` re-tiled and then called `WinActivate` on the last remaining pane whenever a tracked window disappeared, in both isolated and hopping mode. If the visor was visible but you had switched to another application, a shell ending in the terminal yanked keyboard focus back out of that application. Focus is now reclaimed only when one of the visor's own panes owned the foreground window, mirroring the guard `HideVisorAndReturnFocus` already used; otherwise the layout re-balances silently.
+
+## Window Management & Multi-Monitor
+- `WatchdogCheck` closure paths (isolated and hopping) capture foreground ownership before mutating tracked-window lists and gate the post-retile `WinActivate` on it; the foreground is tested against the pre-close list because the dying HWND is normally destroyed before the 250 ms tick observes it.
+
+## Styling & Appearance
+_None_
+
+## Configuration & Tooling
+_None_
+
+---
+
 ## [0.13.4] - 2026-10-28
 
 ## Features

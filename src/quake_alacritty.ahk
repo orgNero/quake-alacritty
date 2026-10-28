@@ -2576,6 +2576,14 @@ WatchdogCheck()
             ; Detect if one or more windows closed spontaneously
             if (aliveList.Length < winList.Length)
             {
+                ; Focus guard: reclaim focus only when this monitor's visor already
+                ; owned it (the same rule HideVisorAndReturnFocus applies). A pane
+                ; exiting in a background visor must not pull the user out of
+                ; whatever app they switched to. Tested against the pre-close list
+                ; because the dying hwnd is usually gone by the time this runs, and
+                ; Windows may already have handed focus to a surviving pane.
+                visorHadFocus := ContainsHwnd(winList, WinActive("A"))
+
                 oldCount := winList.Length
                 g_MonitorWindows[monId] := aliveList
 
@@ -2621,7 +2629,7 @@ WatchdogCheck()
                         }
 
                         TileAlacritty(monId)
-                        if (aliveList.Length > 0 && WinExist("ahk_id " aliveList[aliveList.Length]))
+                        if (visorHadFocus && aliveList.Length > 0 && WinExist("ahk_id " aliveList[aliveList.Length]))
                             WinActivate("ahk_id " aliveList[aliveList.Length])
                     }
                     else
@@ -2648,6 +2656,10 @@ WatchdogCheck()
 
             if (aliveList.Length < g_AlacrittyOrder.Length)
             {
+                ; Focus guard: see the isolated-mode branch above. Hopping mode
+                ; only ever has one visor, so the pool itself is the ownership test.
+                visorHadFocus := ContainsHwnd(g_AlacrittyOrder, WinActive("A"))
+
                 oldCount := g_AlacrittyOrder.Length
                 g_AlacrittyOrder := aliveList
 
@@ -2689,7 +2701,7 @@ WatchdogCheck()
                         }
 
                         TileAlacritty()
-                        if (aliveList.Length > 0 && WinExist("ahk_id " aliveList[aliveList.Length]))
+                        if (visorHadFocus && aliveList.Length > 0 && WinExist("ahk_id " aliveList[aliveList.Length]))
                             WinActivate("ahk_id " aliveList[aliveList.Length])
                     }
                     else
