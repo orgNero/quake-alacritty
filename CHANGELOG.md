@@ -7,6 +7,34 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [Unreleased]
+
+## Features
+### Major
+_None_
+
+### Minor
+_None_
+
+## Fixes
+### Major
+_None_
+
+### Minor
+- **`quake-update` reported "already on the latest version" while the installed copy was behind the clone:** The repo update path treated "the pull moved no commits" as "the deployment is current". After a manual merge, a re-clone or an interrupted install, the clone could sit ahead while `%APPDATA%\alacritty\VERSION` stayed on an older release, so every later run stopped before the installer ran. It now compares the clone's `src\VERSION` (root `VERSION` for the pre-`src/` layout) against the deployed version and re-deploys when the install is older. Only an equal-or-newer deployment reports "already on the latest version".
+
+## Window Management & Multi-Monitor
+_None_
+
+## Styling & Appearance
+_None_
+
+## Configuration & Tooling
+- `src/update.ps1`: added the deployed-vs-clone version gate to the no-op-pull path; the "nothing to pull" verdict is now based on `Compare-QuakeVersion`, not on the pull's exit state alone.
+- `README.md`: documented the re-deploy case under **Updating**.
+
+---
+
 ## [0.13.3] - 2026-10-26
 
 ## Features

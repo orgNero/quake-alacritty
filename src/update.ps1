@@ -226,8 +226,38 @@ function Invoke-QuakeRepoUpdate {
     $headAfter = ([string]$headAfter).Trim()
 
     if ($headBefore -and $headAfter -and $headBefore -eq $headAfter) {
-        Write-Host ("Already on the latest version (v{0})." -f $installedVersion)
-        return 0
+        # No commits arrived, but the deployed copy can still lag behind this
+        # clone: a manual merge/rebase, a fresh clone, or an earlier failed
+        # install all leave the clone ahead of %APPDATA%\alacritty. Only report
+        # "latest" when the deployment is not older than the clone's source.
+        $sourceVersionDir = Join-Path $SourceDir "src"
+        if (-not (Test-Path (Join-Path $sourceVersionDir "VERSION"))) {
+            # Installs recorded before the src/ layout keep VERSION at the root.
+            $sourceVersionDir = $SourceDir
+        }
+        $sourceVersion = Get-QuakeVersionFromDir -Directory $sourceVersionDir
+
+        $needsRedeploy = $true
+        if ($sourceVersion -and $installedVersion) {
+            try {
+                $needsRedeploy = (Compare-QuakeVersion -Left $sourceVersion -Right $installedVersion) -gt 0
+            } catch {
+                $needsRedeploy = ($sourceVersion -ne $installedVersion)
+            }
+        }
+
+        if (-not $needsRedeploy) {
+            Write-Host ("Already on the latest version (v{0})." -f $installedVersion)
+            return 0
+        }
+
+        if ($sourceVersion -and $installedVersion) {
+            Write-Host ("Your install (v{0}) is behind the clone (v{1}). Re-deploying." -f $installedVersion, $sourceVersion)
+        } elseif ($sourceVersion) {
+            Write-Host ("Re-deploying the clone (v{0}) over the current install." -f $sourceVersion)
+        } else {
+            Write-Host "Re-deploying the clone over the current install."
+        }
     }
 
     $installer = Join-Path $SourceDir "src\install.ps1"
