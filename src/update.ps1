@@ -262,7 +262,7 @@ function Invoke-QuakeZipUpdate {
         Write-Host ("Could not apply the update: " + (Get-QuakeShortReason -Text $_.Exception.Message))
         Write-Host "Nothing was installed; you are still on v$installedVersion."
         if ($_.Exception.Message -match 'quarantine|virus|threat') {
-            Write-Host "Antivirus software may have blocked the download. See docs/BUGS_AND_GOTCHAS.md."
+            Write-Host "Antivirus software may have blocked the download. See the troubleshooting section in README.md."
         }
         Write-Host ("Download manually: " + $releasesUrl)
         return 1
