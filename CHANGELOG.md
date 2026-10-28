@@ -11,10 +11,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## Features
 ### Major
-_None_
+- **ZIP installs update themselves:** `quake-update` no longer dead-ends at a download link. For `sourceType=zip` it reads the newest published release, downloads the `quake-alacritty-vX.Y.Z.zip` asset over HTTPS, compares its SHA-256 with the digest published in the release notes, extracts it to `%TEMP%`, runs the extracted `src\install.ps1 -Shell keep -NonInteractive`, and removes the temporary folder. Configuration in `%APPDATA%\alacritty` is preserved. A missing archive, digest mismatch, `VERSION`/release disagreement, or non-zero installer exit aborts before anything is written and falls back to the manual link.
 
 ### Minor
-_None_
+- **`quake-update -Check` is source-aware:** clone installs are told to run `quake-update`; ZIP installs are told it will download and install, and releases without an archive point at the download page instead of promising an install that cannot happen.
+- **A clone branch that lost its upstream repairs itself:** when `refs/remotes/<remote>/<branch>` exists, `update.ps1` runs `git branch --set-upstream-to` and continues instead of stopping.
 
 ## Fixes
 ### Major
@@ -22,6 +23,9 @@ _None_
 
 ### Minor
 - **`quake-update` reported "already on the latest version" while the installed copy was behind the clone:** The repo update path treated "the pull moved no commits" as "the deployment is current". After a manual merge, a re-clone or an interrupted install, the clone could sit ahead while `%APPDATA%\alacritty\VERSION` stayed on an older release, so every later run stopped before the installer ran. It now compares the clone's `src\VERSION` (root `VERSION` for the pre-`src/` layout) against the deployed version and re-deploys when the install is older. Only an equal-or-newer deployment reports "already on the latest version".
+- **Same version, different commit is now detected:** `VERSION` only moves at release prep, so commits merged between releases were invisible to the freshness gate. The gate now also compares the `gitCommit` recorded in `.install-state.json` with the clone's `HEAD` (prefix match, because the record is abbreviated), and re-deploys when they differ.
+- **The missing-upstream message no longer recommends pushing:** it suggested `git push -u origin <branch>`, which would publish a read-only clone's local branch over `origin`. When no remote-tracking branch exists, it now names `git branch --set-upstream-to=origin/<branch> <branch>`.
+- **Concurrent installs are rejected:** `install.ps1` and `uninstall.ps1` hold a session-local `Local\QuakeAlacrittyInstaller` mutex, so two updates (or an update racing an uninstall) can no longer interleave file copies, registry writes and AHK restarts. An abandoned mutex from a crashed run is adopted.
 
 ## Window Management & Multi-Monitor
 _None_
@@ -30,8 +34,10 @@ _None_
 _None_
 
 ## Configuration & Tooling
-- `src/update.ps1`: added the deployed-vs-clone version gate to the no-op-pull path; the "nothing to pull" verdict is now based on `Compare-QuakeVersion`, not on the pull's exit state alone.
-- `README.md`: documented the re-deploy case under **Updating**.
+- `src/update.ps1`: added the deployed-vs-clone version gate (version + commit) to the no-op-pull path, the ZIP download/verify/extract/install path, upstream adoption, and source-aware `-Check` output.
+- `src/quake_common.ps1`: `Invoke-QuakeUpdateCheck` now returns `DownloadUrl`, `ReleaseBody` and `CanAutoUpdate` alongside the version fields, resolved from the release's ZIP asset.
+- `src/install.ps1`, `src/uninstall.ps1`: named-mutex guard around the whole run.
+- `README.md`: documented ZIP self-update, the digest check and the abort/fallback behaviour under **Updating**, and added troubleshooting entries for a failed self-update.
 
 ---
 

@@ -626,6 +626,9 @@ function Invoke-QuakeUpdateCheck {
         AvailableVersion = $null
         UpdateAvailable  = $false
         CompareUrl       = $null
+        DownloadUrl      = $null
+        ReleaseBody      = $null
+        CanAutoUpdate    = $false
         Error            = $null
     }
 
@@ -670,6 +673,40 @@ function Invoke-QuakeUpdateCheck {
     }
 
     $result.AvailableVersion = $remoteVersion
+
+    if ($null -ne $payload.PSObject.Properties['body']) {
+        $result.ReleaseBody = [string]$payload.body
+    }
+
+    # The release carries exactly one asset: quake-alacritty-vX.Y.Z.zip. Prefer
+    # the name that matches the tag, but keep a ZIP fallback so a republished
+    # asset never blocks the update. Update.ps1 uses this for ZIP self-update.
+    $expectedAsset = "quake-alacritty-v$remoteVersion.zip"
+    $assetUrl = $null
+    if ($null -ne $payload.PSObject.Properties['assets']) {
+        foreach ($asset in @($payload.assets)) {
+            if ($null -eq $asset) { continue }
+
+            $assetName = ""
+            if ($null -ne $asset.PSObject.Properties['name']) { $assetName = [string]$asset.name }
+            $assetHref = ""
+            if ($null -ne $asset.PSObject.Properties['browser_download_url']) { $assetHref = [string]$asset.browser_download_url }
+            if ([string]::IsNullOrWhiteSpace($assetHref)) { continue }
+
+            if ($assetName -eq $expectedAsset) {
+                $assetUrl = $assetHref
+                break
+            }
+            if (-not $assetUrl -and $assetName -match '(?i)^quake-alacritty-v.+\.zip$') {
+                $assetUrl = $assetHref
+            }
+        }
+    }
+
+    if (-not [string]::IsNullOrWhiteSpace($assetUrl)) {
+        $result.DownloadUrl = $assetUrl
+        $result.CanAutoUpdate = $true
+    }
 
     if ($InstalledVersion) {
         try {

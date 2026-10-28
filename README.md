@@ -39,7 +39,7 @@ Features mouse-aware multi-monitor detection, dynamic 2×2 quad grid tiling, acr
 * **Keyboard Pane Navigation (`Alt + Arrows`):** Hop typing focus between splits without touching the mouse, featuring deterministic tie-breaking across asymmetrical master layouts.
 * **Window Swapping & Rotation (`Alt + Shift + Arrows`, `Alt + Shift + Space`):** Rearrange panes on the fly by swapping with adjacent windows or rotating all positions cyclically without losing keyboard focus.
 * **In-Terminal Startup Help Hint & Cheat Sheet (`quake-help`, `quake-env`):** Displays a sleek 1-line reminder (`💡 Tip: Type 'quake-help' to view keyboard shortcuts`) on every terminal start. Configurable via `ShowHelpOnStart=tip` in `config.ini` (`tip` for sleek 1-line hint, `banner` for full 20-line table, `none` for silent startup). Running `quake-help` displays the full electric cyan quickstart cheat sheet on demand anytime, while `quake-env` inspects your setup (OS, AutoHotkey, Alacritty, displays) and copies formatted Markdown to the clipboard for rapid bug reporting.
-* **One-Word Updates (`quake-update`):** `quake-update` checks for a newer release and upgrades a Git clone in place (fast-forward pull + installer), and re-deploys when the clone is already ahead of the installed copy. ZIP installs are pointed at the download page instead. `quake-update --check` (`-Check` in PowerShell) reports the version without changing anything.
+* **One-Word Updates (`quake-update`):** `quake-update` checks for a newer release and upgrades a Git clone in place (fast-forward pull + installer), and re-deploys when the clone is already ahead of the installed copy. ZIP installs download the release archive, verify the SHA-256 published in the release notes, and run the extracted installer. `quake-update --check` (`-Check` in PowerShell) reports the version without changing anything.
 * **Once-a-Day Update Notice:** When the cached background check has seen a newer published release, terminal startup prints a single line — `⬆ Update available: vX (you have vY). Type 'quake-update'.` — at most once per calendar day. The line comes from the local cache only (no network on launch), `quake-help` shows it while an update is pending, and `QUAKE_SHOW_HELP=none` suppresses startup messages.
 * **Taskbar Awareness:** Respects custom work areas (such as left-docked taskbars) using `MonitorGetWorkArea`.
 
@@ -179,9 +179,10 @@ quake-update            # check, then update
 quake-update --check    # Git Bash: report only, change nothing
 ```
 
-- **Git clone installs** are fast-forwarded with `git pull --ff-only` and then re-deployed by the freshly pulled `install.ps1`. A dirty working tree, a detached HEAD, or a branch without an upstream stops the update with a plain message. Nothing is ever stashed, reset, or discarded automatically.
-- **"Already on the latest version" means the deployment is current, not just the clone.** If the pull brings no new commits but the clone's `src\VERSION` is newer than the deployed copy — after a manual merge, a re-clone, or an interrupted install — `quake-update` re-runs the installer instead of stopping. Re-deploying never touches your `alacritty.toml` or `config.ini`.
-- **ZIP installs** have nothing to pull, so `quake-update` prints the download link and stops. Download the newer archive from **[Releases](https://github.com/orgNero/quake-alacritty/releases/latest)**, extract it, and run `Install.cmd` (your configuration is preserved).
+- **Git clone installs** are fast-forwarded with `git pull --ff-only` and then re-deployed by the freshly pulled `install.ps1`. A dirty working tree, a detached HEAD, or a branch without an upstream stops the update with a plain message. Nothing is ever stashed, reset, or discarded automatically. A branch that lost its upstream is re-attached to `origin/<branch>` automatically when that remote-tracking branch exists.
+- **"Already on the latest version" means the deployment is current, not just the clone.** If the pull brings no new commits but the clone's `src\VERSION` is newer than the deployed copy — or the deployed copy was installed from a different commit, which is the normal case between releases — `quake-update` re-runs the installer instead of stopping. Re-deploying never touches your `alacritty.toml` or `config.ini`.
+- **ZIP installs update themselves.** `quake-update` reads the newest published release, downloads `quake-alacritty-vX.Y.Z.zip` over HTTPS, compares its SHA-256 with the digest in the release notes, extracts it to a temporary folder and runs the extracted `src\install.ps1` (configuration preserved). The temporary folder is removed afterwards, and nothing outside `%APPDATA%\alacritty` is touched.
+- **Any failure falls back to the download link.** No connection, a missing asset, a digest mismatch, an archive whose `VERSION` disagrees with the release, or an installer that exits non-zero leaves your current install untouched and prints the manual download link instead of half-applying an update.
 - **Watch for the notice:** the once-a-day line (`⬆ Update available: vX (you have vY). Type 'quake-update'.`) is rendered from the cached result of the background check, so it never slows down or blocks a new terminal. It appears at most once per calendar day; `QUAKE_SHOW_HELP=none` hides it along with the startup tip. Run `quake-update` to apply it.
 - **The check reads published releases, not `main`.** A tag that has no GitHub release is never advertised, and the 60-requests-per-hour unauthenticated API limit is ample for a once-a-day check. If GitHub cannot be reached, the previous cached result is kept and the check retries later; failures never block terminal startup.
 - **Your current shell keeps the old functions** until you open a new terminal pane. The update itself runs a child installer, so the running command is never replaced mid-flight.
@@ -356,6 +357,7 @@ The uninstaller:
   Get-FileHash .\quake-alacritty-vX.Y.Z.zip -Algorithm SHA256
   ```
   The expected hash is printed in the release notes of the tag you downloaded. Extract from that verified archive only.
+- **`quake-update` performs that check automatically** for ZIP installs: it downloads the archive, compares it with the digest in the release notes, and refuses to extract on a mismatch. If endpoint security blocks the temporary download, the update stops and your current install stays untouched.
 - **Heuristic detections are expected**, because everything the installer legitimately does is also what malware does: it runs an unsigned script with `-ExecutionPolicy Bypass`, creates a Startup shortcut and an `HKCU` uninstall entry, rewrites `$PROFILE` and `~/.bashrc`, calls `winget` (installing AutoHotkey, which many engines already flag on its own), and the visor installs a global keyboard hook (`InstallKeybdHook`) and enumerates windows through Win32 calls. Static AI and script engines react to that pattern, not to a specific bad file.
 - **Preview instead of trusting:** `.\src\install.ps1 -DryRun` prints every planned file write, shortcut, registry key and profile edit and changes nothing.
 - **After reviewing it**, add exclusions for the extracted folder and for `%APPDATA%\alacritty`, or submit a false-positive report to your vendor with the SHA-256 above.
@@ -364,7 +366,12 @@ The uninstaller:
 
 **`quake-update` says "Could not update from GitHub"**
 - Check the connection and retry. Dirty trees, detached HEADs, missing upstreams and missing Git are intentionally stop states; nothing is stashed or reset for you.
+- A branch without an upstream is re-attached to `origin/<branch>` automatically when that remote-tracking branch exists, so this error should not come back on its own.
 - The current shell keeps its old functions until a new pane is opened.
+
+**`quake-update` downloaded a release but did not install it**
+- It prints the reason and leaves your current version deployed. A digest mismatch, a release without an archive, an archive whose `VERSION` disagrees with the release, and a non-zero installer exit all abort before anything is written.
+- Antivirus or EDR can block the archive in `%TEMP%`; see the quarantine entry above. The manual download link is always printed as the fallback.
 
 **`quake-update` cannot fast-forward after upgrading to v0.13.1**
 - v0.13.1 rewrote the repository history to remove files that should never have been published, so clones made before it share no common commit with `main` and `git pull --ff-only` refuses to continue. Re-clone once, then redeploy:

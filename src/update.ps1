@@ -11,9 +11,12 @@ param(
 .DESCRIPTION
     Gives the user exactly one command to run. A repository install is updated
     with a fast-forward-only git pull followed by the freshly pulled installer.
-    A ZIP install is told where to download the next release, because there is
-    nothing to pull. The running script never replaces itself in place: the
-    installer is always launched as a child process.
+    A ZIP install has nothing to pull, so its release archive is downloaded,
+    checked against the SHA-256 published in the release notes, extracted to a
+    temporary directory and handed to the extracted installer. Any failure
+    falls back to the download link instead of half-applying an update. The
+    running script never replaces itself in place: the installer is always
+    launched as a child process.
 
     The background update check remains advisory; this script is only ever run
     by a human.
@@ -138,7 +141,7 @@ function Test-QuakeGitRepoRoot {
     }
 }
 
-function Invoke-QuakeZipInstructions {
+function Invoke-QuakeZipUpdate {
     param([string]$Reason)
 
     if (-not [string]::IsNullOrWhiteSpace($Reason)) {
@@ -149,7 +152,7 @@ function Invoke-QuakeZipInstructions {
     if ($check.Error) {
         Write-Host ("Could not check for updates: " + (Get-QuakeShortReason -Text ([string]$check.Error)) + ".")
         Write-Host ("Download the latest release: " + $releasesUrl)
-        return 0
+        return 1
     }
 
     if (-not $check.UpdateAvailable) {
@@ -157,12 +160,119 @@ function Invoke-QuakeZipInstructions {
         return 0
     }
 
-    Write-Host ("A newer version (v{0}) is available." -f $check.AvailableVersion)
-    Write-Host "This install was made from a ZIP, so there is nothing to pull."
-    Write-Host ("Download: " + $releasesUrl)
-    Write-Host "Extract it, then run Install.cmd."
-    return 0
+    $availableVersion = [string]$check.AvailableVersion
+    if (-not $check.CanAutoUpdate -or [string]::IsNullOrWhiteSpace([string]$check.DownloadUrl)) {
+        Write-Host ("A newer version (v{0}) is available, but the release has no downloadable archive." -f $availableVersion)
+        Write-Host ("Download manually: " + $releasesUrl)
+        return 1
+    }
+
+    Write-Host ("Updating v{0} -> v{1}..." -f $installedVersion, $availableVersion)
+
+    $tempRoot = Join-Path ([System.IO.Path]::GetTempPath()) ("quake-update-" + [guid]::NewGuid().ToString("N"))
+    $zipPath = Join-Path $tempRoot ("quake-alacritty-v" + $availableVersion + ".zip")
+    $extractDir = Join-Path $tempRoot "extract"
+
+    try {
+        New-Item -ItemType Directory -Path $tempRoot -Force | Out-Null
+
+        Write-Host ("  [Download] " + [string]$check.DownloadUrl)
+        $progressPreference = $ProgressPreference
+        $ProgressPreference = "SilentlyContinue"
+        try {
+            $downloadParams = @{
+                Uri         = [string]$check.DownloadUrl
+                OutFile     = $zipPath
+                TimeoutSec  = 300
+                ErrorAction = "Stop"
+            }
+            # Windows PowerShell 5.1 needs the basic parser; PowerShell 7 dropped it.
+            if ($PSVersionTable.PSVersion.Major -lt 6) { $downloadParams.UseBasicParsing = $true }
+            Invoke-WebRequest @downloadParams
+        } finally {
+            $ProgressPreference = $progressPreference
+        }
+
+        $publishedHash = $null
+        if (-not [string]::IsNullOrWhiteSpace([string]$check.ReleaseBody)) {
+            # The notes carry a "**SHA-256** (`asset.zip`): `<hash>`" line.
+            foreach ($line in ([string]$check.ReleaseBody -split "`r?`n")) {
+                if ($line -notmatch '(?i)SHA-?256') { continue }
+                $hashMatch = [regex]::Match($line, '(?i)\b[0-9a-f]{64}\b')
+                if ($hashMatch.Success) {
+                    $publishedHash = $hashMatch.Value.ToLowerInvariant()
+                    break
+                }
+            }
+        }
+
+        if ($publishedHash) {
+            $actualHash = (Get-FileHash -Path $zipPath -Algorithm SHA256).Hash.ToLowerInvariant()
+            if ($actualHash -ne $publishedHash) {
+                Write-Host "The downloaded archive does not match the SHA-256 published in the release notes."
+                Write-Host "Nothing was installed. Download manually: $releasesUrl"
+                return 1
+            }
+            Write-Host "  [Verify] SHA-256 matches the release notes"
+        } else {
+            Write-Host "  [Verify] No SHA-256 in the release notes; downloaded over HTTPS from GitHub"
+        }
+
+        Expand-Archive -Path $zipPath -DestinationPath $extractDir -Force
+
+        $installer = Join-Path $extractDir "src\install.ps1"
+        if (-not (Test-Path $installer)) {
+            # Archives predating the src/ layout keep the installer at the root.
+            $installer = Join-Path $extractDir "install.ps1"
+        }
+        if (-not (Test-Path $installer)) {
+            Write-Host "The downloaded archive does not contain install.ps1."
+            Write-Host "Nothing was installed. Download manually: $releasesUrl"
+            return 1
+        }
+
+        $archiveVersion = Get-QuakeVersionFromDir -Directory (Split-Path $installer -Parent)
+        if ($archiveVersion -and $archiveVersion -ne $availableVersion) {
+            Write-Host ("The downloaded archive is v{0}, but the release announced v{1}." -f $archiveVersion, $availableVersion)
+            Write-Host "Nothing was installed. Download manually: $releasesUrl"
+            return 1
+        }
+
+        $powerShellExe = Join-Path $env:SystemRoot "System32\WindowsPowerShell\v1.0\powershell.exe"
+        if (-not (Test-Path $powerShellExe)) { $powerShellExe = "powershell.exe" }
+
+        # Same reason as the repo path: the call operator waits for this child
+        # only, while Start-Process -Wait would also wait for the AHK grandchild.
+        & $powerShellExe -NoProfile -ExecutionPolicy Bypass -File $installer -Shell keep -NonInteractive
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host ("The installer failed (exit {0}). Your config was not removed. Run install.ps1 manually to see the details." -f $LASTEXITCODE)
+            return 1
+        }
+
+        $newVersion = Get-QuakeVersionFromDir -Directory $targetDir
+        if (-not $newVersion) {
+            $newState = Read-QuakeInstallState -TargetDir $targetDir
+            if ($newState -and $newState.version) { $newVersion = [string]$newState.version }
+        }
+        if (-not $newVersion) { $newVersion = $availableVersion }
+
+        Write-Host ("Updated to v{0}. Toggle the visor once to retile." -f $newVersion)
+        return 0
+    } catch {
+        Write-Host ("Could not apply the update: " + (Get-QuakeShortReason -Text $_.Exception.Message))
+        Write-Host "Nothing was installed; you are still on v$installedVersion."
+        if ($_.Exception.Message -match 'quarantine|virus|threat') {
+            Write-Host "Antivirus software may have blocked the download. See docs/BUGS_AND_GOTCHAS.md."
+        }
+        Write-Host ("Download manually: " + $releasesUrl)
+        return 1
+    } finally {
+        if (Test-Path $tempRoot) {
+            Remove-Item -Path $tempRoot -Recurse -Force -ErrorAction SilentlyContinue
+        }
+    }
 }
+
 
 function Invoke-QuakeRepoUpdate {
     param([string]$SourceDir)
@@ -175,7 +285,7 @@ function Invoke-QuakeRepoUpdate {
     }
 
     if (-not (Test-QuakeGitRepoRoot -Directory $SourceDir)) {
-        return (Invoke-QuakeZipInstructions -Reason "The Git clone this install came from has moved or is no longer a repository.")
+        return (Invoke-QuakeZipUpdate -Reason "The Git clone this install came from has moved or is no longer a repository.")
     }
 
     $statusResult = Invoke-QuakeGit -Directory $SourceDir -Arguments @('status', '--porcelain', '--untracked-files=no')
@@ -197,8 +307,39 @@ function Invoke-QuakeRepoUpdate {
     $upstreamResult = Invoke-QuakeGit -Directory $SourceDir -Arguments @('rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{u}')
     $upstream = (@($upstreamResult.Output | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }) | Select-Object -First 1)
     if ($upstreamResult.ExitCode -ne 0 -or [string]::IsNullOrWhiteSpace($upstream)) {
-        Write-Host "Your current branch has no upstream. Set one with 'git push -u origin <branch>', then try again."
-        return 1
+        # Tracking is local configuration and easy to lose (re-clone, VS Code,
+        # a manual merge). Adopt the remote-tracking branch when it exists
+        # instead of asking the user to push their local branch upstream.
+        $branchName = (@($headRefResult.Output | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }) | Select-Object -First 1)
+        $branchName = ([string]$branchName).Trim()
+
+        $candidates = @()
+        if (-not [string]::IsNullOrWhiteSpace($branchName)) {
+            $refResult = Invoke-QuakeGit -Directory $SourceDir -Arguments @('for-each-ref', '--format=%(refname:short)', "refs/remotes/*/$branchName")
+            $candidates = @($refResult.Output | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | ForEach-Object { ([string]$_).Trim() })
+        }
+
+        $trackingRef = $null
+        if ($candidates.Count -gt 0) {
+            $originRef = "origin/$branchName"
+            $trackingRef = @($candidates | Where-Object { $_ -eq $originRef }) | Select-Object -First 1
+            if (-not $trackingRef -and $candidates.Count -eq 1) { $trackingRef = $candidates[0] }
+        }
+
+        if ($trackingRef) {
+            $setResult = Invoke-QuakeGit -Directory $SourceDir -Arguments @('branch', ("--set-upstream-to=" + $trackingRef), $branchName)
+            if ($setResult.ExitCode -eq 0) {
+                Write-Host ("Branch '{0}' now tracks {1}." -f $branchName, $trackingRef)
+                $upstream = $trackingRef
+            }
+        }
+
+        if ([string]::IsNullOrWhiteSpace($upstream)) {
+            Write-Host ("Your current branch '{0}' has no upstream and no remote-tracking branch to adopt." -f $branchName)
+            Write-Host ("Set one with: git branch --set-upstream-to=origin/{0} {0}" -f $branchName)
+            Write-Host "Then run 'quake-update' again."
+            return 1
+        }
     }
 
     $headBeforeResult = Invoke-QuakeGit -Directory $SourceDir -Arguments @('rev-parse', 'HEAD')
@@ -246,13 +387,28 @@ function Invoke-QuakeRepoUpdate {
             }
         }
 
+        # VERSION only moves at release prep, so the clone can advance without
+        # a bump. The deploy records the short commit it was installed from;
+        # compare as a prefix because git lengthens abbreviations over time.
+        if (-not $needsRedeploy) {
+            $deployedCommit = ""
+            if ($null -ne $installState.PSObject.Properties['gitCommit']) {
+                $deployedCommit = ([string]$installState.gitCommit).Trim()
+            }
+            if ($deployedCommit -and -not $headAfter.StartsWith($deployedCommit, [System.StringComparison]::OrdinalIgnoreCase)) {
+                $needsRedeploy = $true
+            }
+        }
+
         if (-not $needsRedeploy) {
             Write-Host ("Already on the latest version (v{0})." -f $installedVersion)
             return 0
         }
 
-        if ($sourceVersion -and $installedVersion) {
+        if ($sourceVersion -and $installedVersion -and $sourceVersion -ne $installedVersion) {
             Write-Host ("Your install (v{0}) is behind the clone (v{1}). Re-deploying." -f $installedVersion, $sourceVersion)
+        } elseif ($installedVersion) {
+            Write-Host ("Your install (v{0}) is not the clone's current commit. Re-deploying." -f $installedVersion)
         } elseif ($sourceVersion) {
             Write-Host ("Re-deploying the clone (v{0}) over the current install." -f $sourceVersion)
         } else {
@@ -302,20 +458,6 @@ function Invoke-QuakeRepoUpdate {
     return 0
 }
 
-if ($Check) {
-    $result = Invoke-QuakeUpdateCheck -InstalledVersion $installedVersion -TimeoutSeconds $TimeoutSeconds
-    if ($result.Error) {
-        Write-Host ("Could not check for updates: " + (Get-QuakeShortReason -Text ([string]$result.Error)) + ".")
-        exit 1
-    }
-    if ($result.UpdateAvailable) {
-        Write-Host ("Update available: v{0} (you have v{1}). Run 'quake-update' to install." -f $result.AvailableVersion, $installedVersion)
-    } else {
-        Write-Host ("Already on the latest version (v{0})." -f $installedVersion)
-    }
-    exit 0
-}
-
 $sourceType = ""
 if ($null -ne $installState.PSObject.Properties['sourceType']) {
     $sourceType = [string]$installState.sourceType
@@ -325,11 +467,32 @@ if ($null -ne $installState.PSObject.Properties['sourceDir']) {
     $sourceDir = [string]$installState.sourceDir
 }
 
+if ($Check) {
+    $result = Invoke-QuakeUpdateCheck -InstalledVersion $installedVersion -TimeoutSeconds $TimeoutSeconds
+    if ($result.Error) {
+        Write-Host ("Could not check for updates: " + (Get-QuakeShortReason -Text ([string]$result.Error)) + ".")
+        exit 1
+    }
+    if (-not $result.UpdateAvailable) {
+        Write-Host ("Already on the latest version (v{0})." -f $installedVersion)
+        exit 0
+    }
+
+    if ($sourceType -eq "repo") {
+        Write-Host ("Update available: v{0} (you have v{1}). Run 'quake-update' to install." -f $result.AvailableVersion, $installedVersion)
+    } elseif ($result.CanAutoUpdate) {
+        Write-Host ("Update available: v{0} (you have v{1}). Run 'quake-update' to download and install it." -f $result.AvailableVersion, $installedVersion)
+    } else {
+        Write-Host ("Update available: v{0} (you have v{1}). Download it from {2}" -f $result.AvailableVersion, $installedVersion, $releasesUrl)
+    }
+    exit 0
+}
+
 if ($sourceType -eq "repo") {
     if ([string]::IsNullOrWhiteSpace($sourceDir) -or -not (Test-Path $sourceDir)) {
-        exit (Invoke-QuakeZipInstructions -Reason "The Git clone this install came from is no longer available.")
+        exit (Invoke-QuakeZipUpdate -Reason "The Git clone this install came from is no longer available.")
     }
     exit (Invoke-QuakeRepoUpdate -SourceDir $sourceDir)
 }
 
-exit (Invoke-QuakeZipInstructions)
+exit (Invoke-QuakeZipUpdate)

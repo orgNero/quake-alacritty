@@ -24,6 +24,22 @@ param(
 
 $ErrorActionPreference = "Stop"
 
+# Share the installer's mutex so a teardown cannot interleave with a deploy.
+$installerMutex = $null
+try {
+    $installerMutex = New-Object System.Threading.Mutex($false, "Local\QuakeAlacrittyInstaller")
+    try {
+        if (-not $installerMutex.WaitOne(0)) {
+            Write-Host "A Quake Alacritty install or update is running. Wait for it to finish, then retry." -ForegroundColor Yellow
+            exit 1
+        }
+    } catch [System.Threading.AbandonedMutexException] {
+        # The previous holder died without releasing; this process now owns it.
+    }
+} catch {
+    $installerMutex = $null
+}
+
 $TargetDir = Join-Path $env:APPDATA "alacritty"
 $SourceDir = $PSScriptRoot
 $startupDir = [Environment]::GetFolderPath("Startup")

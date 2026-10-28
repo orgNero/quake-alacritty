@@ -78,6 +78,24 @@ param(
 
 $ErrorActionPreference = "Stop"
 
+# Two installers (or an install racing an uninstall) would interleave file
+# copies, registry writes and AHK restarts. Hold a session-local mutex for the
+# process lifetime; Windows releases it if this process dies.
+$installerMutex = $null
+try {
+    $installerMutex = New-Object System.Threading.Mutex($false, "Local\QuakeAlacrittyInstaller")
+    try {
+        if (-not $installerMutex.WaitOne(0)) {
+            Write-Host "Another Quake Alacritty install or update is already running. Wait for it to finish, then retry."
+            exit 1
+        }
+    } catch [System.Threading.AbandonedMutexException] {
+        # The previous holder died without releasing; this process now owns it.
+    }
+} catch {
+    $installerMutex = $null
+}
+
 $SourceDir = $PSScriptRoot
 $RepoRoot = Split-Path $SourceDir -Parent
 if ([string]::IsNullOrWhiteSpace($RepoRoot)) { $RepoRoot = $SourceDir }
