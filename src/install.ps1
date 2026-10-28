@@ -1100,12 +1100,8 @@ if ($selectedShell -eq "gitbash" -or (Test-Path $bashrcPath)) {
 # Step 9: Windows "Installed Apps" (ARP) Registration
 # -----------------------------------------------------------------------------
 Write-Host "`n🧾 Windows Installed Apps registration..." -ForegroundColor Yellow
-$defaultTarget = (Get-QuakeTargetDir)
-$isDefaultTarget = ([System.IO.Path]::GetFullPath($TargetDir).TrimEnd('\') -ieq [System.IO.Path]::GetFullPath($defaultTarget).TrimEnd('\'))
 
-if (-not $isDefaultTarget) {
-    Write-Host "  [Skip] Deploy target is not $defaultTarget (portable mode)" -ForegroundColor DarkGray
-} elseif ($UseSymlinks) {
+if ($UseSymlinks) {
     Write-Host "  [Skip] Symlink development deployments are not registered as installed apps" -ForegroundColor DarkGray
 } else {
     $displayIcon = $null

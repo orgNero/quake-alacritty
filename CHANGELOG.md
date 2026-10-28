@@ -22,6 +22,7 @@ _None_
 
 ### Minor
 - **A pane exiting in a background visor no longer steals focus:** `WatchdogCheck` re-tiled and then called `WinActivate` on the last remaining pane whenever a tracked window disappeared, in both isolated and hopping mode. If the visor was visible but you had switched to another application, a shell ending in the terminal yanked keyboard focus back out of that application. Focus is now reclaimed only when one of the visor's own panes owned the foreground window, mirroring the guard `HideVisorAndReturnFocus` already used; otherwise the layout re-balances silently.
+- **Uninstalling no longer strands terminal windows:** `uninstall.ps1` stopped the AutoHotkey visor and then deleted files, but nothing ever touched `alacritty.exe`. A hidden visor left invisible panes and their shells running with no manager; a visible one left orphaned panes. The uninstaller now enumerates every Alacritty pane window (hidden ones included), prints the count and titles, and asks whether to close them. The default is **leave them open** — closing a terminal can destroy unsaved shell state — and panes that ignore `WM_CLOSE` within the grace period are reported and left running rather than force-killed. `-CloseTerminals` opts in without a prompt; `-NonInteractive` keeps the leave-open default.
 
 ## Window Management & Multi-Monitor
 - `WatchdogCheck` closure paths (isolated and hopping) capture foreground ownership before mutating tracked-window lists and gate the post-retile `WinActivate` on it; the foreground is tested against the pre-close list because the dying HWND is normally destroyed before the 250 ms tick observes it.
@@ -30,7 +31,7 @@ _None_
 _None_
 
 ## Configuration & Tooling
-_None_
+- **Dead "portable mode" branch removed:** `install.ps1` skipped the "Installed Apps" registration whenever the deploy target differed from `%APPDATA%\alacritty`, but the target is hardcoded to that path and there is no `-TargetDir`, so the skip could never fire. Registration now happens for every non-symlink deployment. Real portable installs would require `-TargetDir` to be threaded through install state, the uninstaller and the shortcut; that is deliberately not done here.
 
 ---
 

@@ -326,11 +326,14 @@ powershell -ExecutionPolicy Bypass -File "$env:APPDATA\alacritty\uninstall.ps1"
 ```
 
 The uninstaller:
-- Requests a graceful shutdown of running Quake Alacritty instances (force-kill only as a fallback) so seam overlays are cleaned up.
+- Requests a graceful shutdown of the running AutoHotkey visor process (force-kill only as a fallback) so seam overlays are cleaned up. This stops the manager, **not your terminals**.
+- Lists any Alacritty panes that are still running — hidden ones are marked `(hidden)` — and asks whether to close them gracefully. The default is to **leave them open**, because closing a terminal can discard a running command. Panes that do not exit within the grace period are reported and left running, never force-killed. `-NonInteractive` leaves them open; `-CloseTerminals` closes them without prompting.
 - Removes the Windows Startup shortcut.
 - Removes the per-user "Installed Apps" registry entry (`HKCU\Software\Microsoft\Windows\CurrentVersion\Uninstall\QuakeAlacritty`).
 - Cleans up the `quake-help`, `quake-env` and `quake-update` commands from your PowerShell `$PROFILE` and Git Bash `~/.bashrc`.
 - Removes deployed application files and installer artifacts (`.install-state.json`, `.update-check.json`, `.update-notice`, `VERSION`, `CONFIG_SCHEMA`, `quake_common.ps1`, `update.ps1`, `update-check.ps1`) while giving you the option to keep or delete your custom configuration files (`config.ini` and `alacritty.toml`). Choosing to delete the configuration also removes the timestamped `.bak` backups and the now-empty install folder.
+
+> **Hidden panes keep running.** The visor hides terminal windows instead of closing them, so a pane you have not opened in days can still hold a shell. Uninstalling removes the manager and its files, but those shells persist until you close or reboot. Run `Get-Process alacritty` afterwards to confirm nothing is left over.
 
 ---
 

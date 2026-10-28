@@ -1,7 +1,8 @@
 ﻿[CmdletBinding()]
 param(
     [switch]$RemoveConfigs,
-    [switch]$NonInteractive
+    [switch]$NonInteractive,
+    [switch]$CloseTerminals
 )
 
 <#
@@ -19,7 +20,12 @@ param(
     Also delete config.ini, alacritty.toml and their timestamped backups.
 
 .PARAMETER NonInteractive
-    Never prompt; keep configuration files unless -RemoveConfigs is supplied.
+    Never prompt; keep configuration files unless -RemoveConfigs is supplied, and
+    leave running terminal panes open unless -CloseTerminals is supplied.
+
+.PARAMETER CloseTerminals
+    Ask every running Alacritty pane to close (WM_CLOSE, wait, never force-kill)
+    without prompting. Use with -NonInteractive for unattended teardowns.
 #>
 
 $ErrorActionPreference = "Stop"
@@ -90,6 +96,67 @@ if ($stopped -gt 0) {
     Write-Host "  Stopped $stopped running Quake Alacritty process(es)." -ForegroundColor Green
 } else {
     Write-Host "  No active Quake Alacritty processes found." -ForegroundColor Gray
+}
+
+# 1b. Offer to close running terminal panes. Stopping the AHK process removes the
+# manager, not the terminals: hidden panes keep running invisibly and visible ones
+# are orphaned. Never force-kill here - a pane may hold unsaved shell state.
+Write-Host "`n🪟 Checking for running Alacritty panes..." -ForegroundColor Yellow
+$terminalWindows = @()
+if (Get-Command Get-QuakeTerminalWindows -ErrorAction SilentlyContinue) {
+    try {
+        $terminalWindows = @(Get-QuakeTerminalWindows)
+    } catch {
+        Write-Warning "  Could not enumerate Alacritty windows: $_"
+    }
+} else {
+    foreach ($process in @(Get-Process -Name 'alacritty' -ErrorAction SilentlyContinue)) {
+        $terminalWindows += [pscustomobject]@{
+            ProcessId = $process.Id
+            Handle    = 0
+            Title     = "alacritty.exe (PID $($process.Id))"
+            Visible   = $true
+        }
+    }
+}
+
+if ($terminalWindows.Count -eq 0) {
+    Write-Host "  No running Alacritty panes found." -ForegroundColor Gray
+} else {
+    Write-Host "  $($terminalWindows.Count) Alacritty pane(s) are still running:" -ForegroundColor Cyan
+    foreach ($window in $terminalWindows) {
+        $hiddenNote = if ($window.Visible) { "" } else { "  (hidden)" }
+        Write-Host "    - $($window.Title)$hiddenNote" -ForegroundColor DarkGray
+    }
+
+    $shouldCloseTerminals = [bool]$CloseTerminals
+    if (-not $shouldCloseTerminals -and -not $NonInteractive -and [Environment]::UserInteractive) {
+        Write-Host "  Their shells keep running after uninstall, hidden panes included." -ForegroundColor DarkGray
+        $response = Read-Host "  Close these panes gracefully? (y/N) [default: N]"
+        if ($response -match '^(y|yes)$') { $shouldCloseTerminals = $true }
+    }
+
+    if ($shouldCloseTerminals) {
+        $closeable = @($terminalWindows | Where-Object { $_.Handle })
+        if ($closeable.Count -eq 0) {
+            Write-Warning "  quake_common.ps1 is unavailable, so panes cannot be closed gracefully; leaving them open."
+        } else {
+            $survivors = @(Close-QuakeTerminalWindows -Windows $closeable)
+            $closed = $closeable.Count - $survivors.Count
+            if ($closed -gt 0) {
+                Write-Host "  Closed $closed pane(s) gracefully." -ForegroundColor Green
+            }
+            if ($survivors.Count -gt 0) {
+                Write-Host "  $($survivors.Count) pane(s) did not close within the grace period and are left running:" -ForegroundColor Yellow
+                foreach ($window in $survivors) {
+                    Write-Host "    - $($window.Title)" -ForegroundColor DarkGray
+                }
+                Write-Host "  They may be waiting on a command or a save prompt; close them yourself if you want them gone." -ForegroundColor Gray
+            }
+        }
+    } else {
+        Write-Host "  Leaving $($terminalWindows.Count) pane(s) open. Close them from the taskbar when you are done." -ForegroundColor Cyan
+    }
 }
 
 # 2. Remove Windows Startup shortcut

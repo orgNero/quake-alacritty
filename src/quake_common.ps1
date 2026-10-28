@@ -352,26 +352,18 @@ function Get-QuakeAhkProcesses {
     return $results.ToArray()
 }
 
-# Stops Quake Alacritty AutoHotkey instances. Posts WM_CLOSE to the process windows
-# first so AHK's OnExit cleanup (orphan divider removal) can run, then force-kills
-# anything that is still alive after the grace period.
-function Stop-QuakeAhkProcess {
-    [CmdletBinding()]
-    param(
-        [string[]]$AllowedScriptPaths = @(),
-        [int]$GracePeriodMs = 3000
-    )
-
-    $targets = @(Get-QuakeAhkProcesses -AllowedScriptPaths $AllowedScriptPaths)
-    if ($targets.Count -eq 0) { return 0 }
-
-    $processIds = @($targets | ForEach-Object { $_.ProcessId })
-
-    $source = @'
+# -----------------------------------------------------------------------------
+# Window helpers (WM_CLOSE handshake)
+# -----------------------------------------------------------------------------
+# Shared by the AHK teardown and the uninstaller's terminal prompt. Compiled lazily
+# so installs that never touch a running process pay nothing for it.
+$script:QuakeWindowToolsSource = @'
 using System;
+using System.Collections.Generic;
 using System.Runtime.InteropServices;
+using System.Text;
 
-public static class QuakeWindowCloser
+public static class QuakeWindowTools
 {
     private delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
 
@@ -384,6 +376,18 @@ public static class QuakeWindowCloser
     [DllImport("user32.dll")]
     private static extern bool PostMessage(IntPtr hWnd, uint Msg, IntPtr wParam, IntPtr lParam);
 
+    [DllImport("user32.dll")]
+    private static extern bool IsWindowVisible(IntPtr hWnd);
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    private static extern int GetWindowTextLength(IntPtr hWnd);
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    private static extern int GetWindowText(IntPtr hWnd, StringBuilder lpString, int nMaxCount);
+
+    // Posts WM_CLOSE to every top-level window owned by the process. Deliberately no
+    // title or visibility filter: AutoHotkey's message window is hidden and untitled,
+    // and closing it is what lets OnExit clean up the seam overlays.
     public static int PostCloseToProcess(int processId)
     {
         int posted = 0;
@@ -403,15 +407,129 @@ public static class QuakeWindowCloser
         }, IntPtr.Zero);
         return posted;
     }
+
+    // Titled top-level windows, visible or not: one per Alacritty pane, including the
+    // panes the visor has hidden from the desktop.
+    public static long[] GetTitledWindows(int processId)
+    {
+        List<long> handles = new List<long>();
+        uint target = (uint)processId;
+        EnumWindows(delegate(IntPtr hWnd, IntPtr lParam)
+        {
+            uint pid;
+            GetWindowThreadProcessId(hWnd, out pid);
+            if (pid == target && GetWindowTextLength(hWnd) > 0)
+            {
+                handles.Add(hWnd.ToInt64());
+            }
+            return true;
+        }, IntPtr.Zero);
+        return handles.ToArray();
+    }
+
+    public static string GetTitle(long handle)
+    {
+        IntPtr hWnd = new IntPtr(handle);
+        int length = GetWindowTextLength(hWnd);
+        if (length <= 0) { return String.Empty; }
+        StringBuilder builder = new StringBuilder(length + 1);
+        GetWindowText(hWnd, builder, builder.Capacity);
+        return builder.ToString();
+    }
+
+    public static bool IsVisible(long handle)
+    {
+        return IsWindowVisible(new IntPtr(handle));
+    }
+
+    public static bool PostClose(long handle)
+    {
+        return PostMessage(new IntPtr(handle), 0x0010, IntPtr.Zero, IntPtr.Zero);
+    }
 }
 '@
 
-    try {
-        if (-not ("QuakeWindowCloser" -as [type])) {
-            Add-Type -TypeDefinition $source -ErrorAction Stop
+function Initialize-QuakeWindowTools {
+    if (-not ("QuakeWindowTools" -as [type])) {
+        Add-Type -TypeDefinition $script:QuakeWindowToolsSource -ErrorAction Stop
+    }
+}
+
+# Returns one object per running Alacritty pane window. Hidden panes have no taskbar
+# entry, so the uninstaller has to name them explicitly to be honest about what lives.
+function Get-QuakeTerminalWindows {
+    [CmdletBinding()]
+    param()
+
+    $processes = @(Get-Process -Name 'alacritty' -ErrorAction SilentlyContinue)
+    if ($processes.Count -eq 0) { return @() }
+
+    Initialize-QuakeWindowTools
+
+    $results = New-Object System.Collections.Generic.List[object]
+    foreach ($process in $processes) {
+        foreach ($handle in [QuakeWindowTools]::GetTitledWindows($process.Id)) {
+            $title = [QuakeWindowTools]::GetTitle($handle)
+            if ([string]::IsNullOrWhiteSpace($title)) { $title = "Alacritty" }
+            $results.Add([pscustomobject]@{
+                ProcessId = $process.Id
+                Handle    = $handle
+                Title     = $title
+                Visible   = [QuakeWindowTools]::IsVisible($handle)
+            })
         }
+    }
+
+    if ($results.Count -eq 0) { return @() }
+    return $results.ToArray()
+}
+
+# Asks each pane window to close, waits, and returns the windows still alive. Never
+# force-kills: a pane may be holding unsaved shell state or a confirmation prompt.
+function Close-QuakeTerminalWindows {
+    [CmdletBinding()]
+    param(
+        [object[]]$Windows = @(),
+        [int]$GracePeriodMs = 5000
+    )
+
+    $open = @($Windows | Where-Object { $_ -and $_.Handle })
+    if ($open.Count -eq 0) { return @() }
+
+    Initialize-QuakeWindowTools
+    foreach ($window in $open) {
+        [void][QuakeWindowTools]::PostClose([long]$window.Handle)
+    }
+
+    $deadline = (Get-Date).AddMilliseconds($GracePeriodMs)
+    while ((Get-Date) -lt $deadline) {
+        $alive = @($open | Where-Object { Get-Process -Id $_.ProcessId -ErrorAction SilentlyContinue })
+        if ($alive.Count -eq 0) { break }
+        Start-Sleep -Milliseconds 100
+    }
+
+    return @($open | Where-Object { Get-Process -Id $_.ProcessId -ErrorAction SilentlyContinue })
+}
+
+# Stops Quake Alacritty AutoHotkey instances. Posts WM_CLOSE to the process windows
+# first so AHK's OnExit cleanup (orphan divider removal) can run, then force-kills
+# anything that is still alive after the grace period.
+function Stop-QuakeAhkProcess {
+    [CmdletBinding()]
+    param(
+        [string[]]$AllowedScriptPaths = @(),
+        [int]$GracePeriodMs = 3000
+    )
+
+    $targets = @(Get-QuakeAhkProcesses -AllowedScriptPaths $AllowedScriptPaths)
+    if ($targets.Count -eq 0) { return 0 }
+
+    $processIds = @($targets | ForEach-Object { $_.ProcessId })
+
+    try {
+        Initialize-QuakeWindowTools
         foreach ($processId in $processIds) {
-            [void][QuakeWindowCloser]::PostCloseToProcess($processId)
+            [void][QuakeWindowTools]::PostCloseToProcess($processId)
         }
     } catch {
         Write-Verbose "Graceful close unavailable, falling back to force-kill: $_"
