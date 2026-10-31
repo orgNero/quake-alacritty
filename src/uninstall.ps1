@@ -283,6 +283,9 @@ $artifactFiles = @(
     ".install-state.json",
     ".update-check.json",
     ".update-notice",
+    ".first-run-consumed",
+    "quake.log",
+    "quake.log.1",
     "uninstall.ps1"
 )
 foreach ($file in $artifactFiles) {

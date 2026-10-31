@@ -12,6 +12,46 @@ function Get-QuakeTargetDir {
     return (Join-Path $env:APPDATA "alacritty")
 }
 
+function Write-QuakeLog {
+    <#
+    .SYNOPSIS
+        Appends one line to %APPDATA%\alacritty\quake.log.
+
+    .DESCRIPTION
+        The AHK visor owns this log; PowerShell helpers append to it so a single
+        file explains a whole session. Mirrors the AHK writer: UTF-8 without BOM,
+        one rotation at 256 KB, and never throws - a failed log write must not
+        break an update check or an install.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)][string]$Message,
+        [ValidateSet("INFO", "WARN", "ERROR")][string]$Level = "INFO",
+        [string]$TargetDir = (Get-QuakeTargetDir)
+    )
+
+    try {
+        if ([string]::IsNullOrWhiteSpace($TargetDir)) { return }
+        if (-not (Test-Path $TargetDir)) {
+            New-Item -ItemType Directory -Path $TargetDir -Force | Out-Null
+        }
+
+        $logPath = Join-Path $TargetDir "quake.log"
+        if ((Test-Path $logPath) -and ((Get-Item $logPath -ErrorAction Stop).Length -ge 262144)) {
+            $rotated = "$logPath.1"
+            if (Test-Path $rotated) { Remove-Item $rotated -Force -ErrorAction SilentlyContinue }
+            Move-Item -Path $logPath -Destination $rotated -Force -ErrorAction SilentlyContinue
+        }
+
+        # One entry per line: the AHK reader treats the file as line records.
+        $singleLine = ($Message -replace "\r?\n", " ")
+        $stamp = (Get-Date).ToString("yyyy-MM-dd HH:mm:ss")
+        [System.IO.File]::AppendAllText($logPath, "$stamp [$Level] $singleLine`r`n", (New-Object System.Text.UTF8Encoding($false)))
+    } catch {
+        # Logging is diagnostic only.
+    }
+}
+
 function Get-QuakeVersionFromDir {
     [CmdletBinding()]
     param([string]$Directory)

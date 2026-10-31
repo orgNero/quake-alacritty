@@ -122,6 +122,7 @@ if ($check.Error) {
         [Console]::Error.WriteLine("Could not write update check cache: $($_.Exception.Message)")
     }
 
+    Write-QuakeLog -Level "WARN" -Message "update-check: failed: $lastError" -TargetDir $targetDir
     [Console]::Error.WriteLine("Update check failed: $lastError")
     exit 1
 }
@@ -131,7 +132,14 @@ try {
         -CheckedAtUtc $nowStamp -NextCheckAtUtc $nowUtc.AddHours(24).ToString("yyyyMMddHHmmss") -LastError $null
 } catch {
     [Console]::Error.WriteLine("Could not write update check cache: $($_.Exception.Message)")
+    Write-QuakeLog -Level "WARN" -Message "update-check: could not write cache: $($_.Exception.Message)" -TargetDir $targetDir
     exit 1
+}
+
+if ($check.UpdateAvailable) {
+    Write-QuakeLog -Message "update-check: update available $installedVersion -> $($check.AvailableVersion)" -TargetDir $targetDir
+} else {
+    Write-QuakeLog -Message "update-check: up to date (installed $installedVersion, latest $($check.AvailableVersion))" -TargetDir $targetDir
 }
 
 exit 0

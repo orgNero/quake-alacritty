@@ -899,6 +899,18 @@ foreach ($file in @("alacritty.toml", "config.ini")) {
     }
 }
 
+# A fresh or reset config.ini restores FirstRun=true. The AHK remembers that the
+# one-time tip was already shown in a marker file instead of rewriting config.ini
+# (IniWrite would convert the UTF-8 file to the ANSI code page), so the marker has
+# to be cleared whenever FirstRun is restored.
+if ((-not $destIniExisted -or $ResetConfig) -and (Test-ShouldApply "Clear the first-run marker in $TargetDir")) {
+    $firstRunMarker = Join-Path $TargetDir ".first-run-consumed"
+    if (Test-Path $firstRunMarker) {
+        Remove-Item -Path $firstRunMarker -Force -ErrorAction SilentlyContinue
+        Write-Host "  [State] Cleared first-run marker" -ForegroundColor Green
+    }
+}
+
 # -----------------------------------------------------------------------------
 # Step 6: Merge Missing config.ini Keys & Configure Preferred Shell
 # -----------------------------------------------------------------------------

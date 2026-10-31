@@ -7,6 +7,44 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [Unreleased]
+
+## Features
+### Major
+_None_
+
+### Minor
+- **`quake.log` records what used to fail silently:** `%APPDATA%\alacritty\quake.log` is append-only UTF-8 with one rotation at 256 KB. It records rejected config values, failed hotkey bindings, failed window moves, monitor migrations, shell-resolution problems and update-check outcomes, so a typo is diagnosable without reading source. The tray gains **Open log** and **Copy diagnostics**; the diagnostics report contains version, AutoHotkey/Windows versions, monitor layout, resolved shell, pane count, config problems and the last 40 log lines, with `%APPDATA%`/`%USERPROFILE%` shortened to tokens so it can be pasted into a public issue.
+- **Failed hotkey bindings are reported instead of swallowed:** `RegisterKey` records each failure as `label=value (reason)` and `RegisterHotkeys` reports the list through a startup tray tooltip, the **Config warnings** dialog/tray entry and the log. A failed `ToggleVisor` still falls back to `#sc029` so the visor stays reachable, but the fallback is reported rather than hidden.
+- **Shell resolution reads only `[terminal.shell]`:** the welcome launch used to take the first `program = "..."` anywhere in `alacritty.toml`, so a commented-out shell or an unrelated table could win; the parser now tracks the current table header, ignores comments and accepts single- or double-quoted values. Backslash escapes in a double-quoted value (`C:\\Users\\...`) are undone, so the resolved path is a real path in the log and diagnostics. The resolved executable is quoted in the `-e` command, so a shell under `C:\Program Files\...` no longer splits at the space.
+
+## Fixes
+### Major
+_None_
+
+### Minor
+- **A failed `WinMove` is no longer invisible:** tiling now goes through `MovePane`, which separates "the pane is already gone" (a race with a closing window, logged as `INFO`) from an invalid rectangle or a failed move (logged as `ERROR`), instead of discarding the result of `try WinMove` at 25 call sites.
+- **Monitor migration is recorded:** when a monitor disappears, the log names the lost monitor ordinal and how many panes were migrated to the primary display.
+- **`config.ini` is no longer rewritten by `IniWrite`:** consuming `FirstRun` used to call `IniWrite`, which converts the UTF-8 file to the system ANSI code page and can mangle non-ASCII comments. First-run consumption is now tracked by `%APPDATA%\alacritty\.first-run-consumed`, and the installer clears that marker whenever it restores a fresh `config.ini`. `FirstRun` is also consumed by the first successful launch in **every** shell path, which is what the docs always claimed: previously a PowerShell launch with `ShowHelpOnStart=tip` or `banner` left it set. The INI reader's real limitation is documented instead: values must stay ASCII because Windows only understands UTF-16 INI files as Unicode.
+
+## Window Management & Multi-Monitor
+_None_
+
+## Styling & Appearance
+_None_
+
+## Configuration & Tooling
+- `src/quake_alacritty.ahk`: added `InitLog`/`LogWrite`/`RotateLogIfNeeded`/`LogConfigProblems`, `MovePane`, `GetConfiguredShellInfo`, `FirstRunMarkerPath`/`MarkFirstRunConsumed`, `OpenLogFile`/`CopyDiagnostics`/`BuildDiagnosticsText`, and the two new tray entries; `ShowConfigWarnings` now includes binding failures.
+- `src/quake_common.ps1`: added `Write-QuakeLog`, shared by the PowerShell helpers so one file explains a whole session.
+- `src/update-check.ps1`: logs the check outcome (update available / up to date / failure / cache write failure).
+- `src/install.ps1`: clears `.first-run-consumed` when it deploys or resets `config.ini`.
+- `src/uninstall.ps1`: removes `.first-run-consumed`, `quake.log` and `quake.log.1`.
+- `src/config.ini`: documents the ASCII-value rule and the first-run marker.
+- `README.md`: documented the log, the two tray entries, the diagnostics report, binding-failure reporting, the ASCII limitation and the `[terminal.shell]`-only parser.
+- `InstallKeybdHook true, true` is kept deliberately (documented in the source): the `$`-prefixed and context-sensitive bindings rely on it.
+
+---
+
 ## [0.13.5] - 2026-10-28
 
 ## Features

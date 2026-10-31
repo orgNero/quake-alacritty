@@ -4,6 +4,9 @@ Persistent true
 DetectHiddenWindows true
 SetWinDelay -1
 SetControlDelay -1
+; Keep the keyboard hook: the `$`-prefixed and HotIfWinActive context-sensitive
+; bindings below rely on it, and the config reload path can swap bindings at
+; runtime. Removing it is a behaviour change, not an optimisation.
 InstallKeybdHook true, true
 A_MenuMaskKey := "vkE8"
 
@@ -69,9 +72,87 @@ global g_VisorReturnHwnd       := 0
 ; In-memory debounce for the background update check (not a session-wide lock)
 global g_LastUpdateCheckSpawn  := 0
 
-; Config values that were rejected on read. Reported once at startup and kept for
-; the Config Reliability log (slice B) instead of being silently replaced.
+; Config values that were rejected on read. Reported once at startup, written to
+; quake.log and kept for the tray diagnostics instead of being silently replaced.
 global g_ConfigWarnings        := []
+
+; Hotkey bindings that failed or needed the toggle fallback. Same treatment as
+; g_ConfigWarnings: startup dialog, log, tray diagnostics.
+global g_BindingFailures       := []
+
+; Diagnostics log (%APPDATA%\alacritty\quake.log). Append-only, capped, one
+; rotation. The log is the source of truth for "why did that not work?" because
+; TrayTip is dropped whenever Windows notifications are off.
+global g_LogPath               := ""
+global g_LogMaxBytes           := 262144
+
+; -------------------------------------------------------------
+; Diagnostics Log
+; -------------------------------------------------------------
+; Everything that used to disappear into a bare `try` or a silent default goes
+; here: rejected config values, failed hotkey bindings, failed window moves,
+; monitor migrations and shell-resolution failures. Logging must never take the
+; visor down, so every write is wrapped.
+InitLog()
+{
+    global g_LogPath
+    appData := EnvGet("APPDATA")
+    logDir := (appData != "") ? appData . "\alacritty" : A_ScriptDir
+    if (!DirExist(logDir))
+        logDir := A_ScriptDir
+    g_LogPath := logDir . "\quake.log"
+}
+
+LogWrite(level, message)
+{
+    global g_LogPath
+    if (g_LogPath == "")
+        return
+    try {
+        RotateLogIfNeeded()
+        stamp := FormatTime(A_Now, "yyyy-MM-dd HH:mm:ss")
+        FileAppend(stamp . " [" . level . "] " . message . "`r`n", g_LogPath, "UTF-8-RAW")
+    } catch {
+        ; A failed log write is not worth a dialog; the visor keeps running.
+    }
+}
+
+; One rotation at 256 KB keeps the pair under ~512 KB without a rotation chain.
+RotateLogIfNeeded()
+{
+    global g_LogPath, g_LogMaxBytes
+    if (!FileExist(g_LogPath))
+        return
+    try {
+        if (FileGetSize(g_LogPath) < g_LogMaxBytes)
+            return
+        rotated := g_LogPath . ".1"
+        if FileExist(rotated)
+            FileDelete(rotated)
+        FileMove(g_LogPath, rotated)
+    } catch {
+    }
+}
+
+; Writes every collected config/binding problem. Called once after startup so the
+; list is complete, and the same strings feed the tray dialog.
+LogConfigProblems()
+{
+    global g_ConfigWarnings, g_BindingFailures
+    for warning in g_ConfigWarnings
+        LogWrite("WARN", "config: " . warning)
+    for failure in g_BindingFailures
+        LogWrite("WARN", "binding: " . failure)
+}
+
+; Minimal join for log messages; AHK v2 has no built-in Array.join.
+JoinArray(items, separator)
+{
+    text := ""
+    for item in items
+        text .= (text == "" ? "" : separator) . item
+    return text
+}
 
 ; Helper: Resolves configuration file location and loads user preferences
 LoadConfig()
@@ -97,12 +178,19 @@ LoadConfig()
         g_ConfigFile := appDataPath
 
     if (!FileExist(g_ConfigFile))
+    {
+        LogWrite("INFO", "config: no config.ini at " . g_ConfigFile . "; using defaults")
         return
+    }
+    LogWrite("INFO", "config: reading " . g_ConfigFile)
 
     ; 2. [General]
     try {
         frVal := IniRead(g_ConfigFile, "General", "FirstRun", "false")
-        g_FirstRun := (frVal = "true" || frVal = "1")
+        ; FirstRun is consumed once per install. The AHK cannot clear the key in
+        ; config.ini: IniWrite would rewrite the UTF-8 file in the ANSI code page
+        ; (see README), so consumption is tracked by a marker file instead.
+        g_FirstRun := (frVal = "true" || frVal = "1") && !FileExist(FirstRunMarkerPath())
         modeVal := Trim(StrLower(IniRead(g_ConfigFile, "General", "MultiMonitorMode", "isolated")))
         if (modeVal == "hopping" || modeVal == "isolated")
             g_MultiMonitorMode := modeVal
@@ -202,73 +290,131 @@ NormalizeHotkey(value)
 }
 
 ; Helper: records a rejected config value instead of silently substituting a
-; default. Kept as data so the slice B log can write the same list verbatim.
+; default. Kept as data so the log and tray diagnostics write the same list.
 AddConfigWarning(message)
 {
     global g_ConfigWarnings
     g_ConfigWarnings.Push(message)
 }
 
-; Shows every collected config problem. Until quake.log exists (Config Reliability
-; slice B) this dialog and the tray entry are the only reliable surfaces, because
-; TrayTip is dropped whenever Windows notifications are off.
+; Helper: records a hotkey binding that failed or needed a fallback.
+AddBindingFailure(label, value, reason)
+{
+    global g_BindingFailures
+    g_BindingFailures.Push(label . "=" . value . " (" . reason . ")")
+}
+
+; First-run consumption marker. Lives next to the deployed config so the
+; installer can clear it when it restores FirstRun=true.
+FirstRunMarkerPath()
+{
+    appData := EnvGet("APPDATA")
+    if (appData != "")
+        return appData . "\alacritty\.first-run-consumed"
+    return A_ScriptDir . "\.first-run-consumed"
+}
+
+MarkFirstRunConsumed()
+{
+    global g_FirstRun
+    g_FirstRun := false
+    markerPath := FirstRunMarkerPath()
+    try {
+        if FileExist(markerPath)
+            FileDelete(markerPath)
+        FileAppend(FormatTime(A_Now, "yyyy-MM-dd HH:mm:ss"), markerPath, "UTF-8-RAW")
+        LogWrite("INFO", "first-run: flag consumed; marker written")
+    } catch as err {
+        LogWrite("WARN", "first-run: could not write marker: " . err.Message)
+    }
+}
+
+; Shows every collected config problem, including failed hotkey bindings.
+; TrayTip is not a reliable surface (Windows notifications can be off), so this
+; dialog and the log are the primary reports and the tray entry keeps them
+; reachable afterwards.
 ShowConfigWarnings()
 {
-    global g_ConfigWarnings
-    if (!g_ConfigWarnings.Length)
+    global g_ConfigWarnings, g_BindingFailures
+    if (!g_ConfigWarnings.Length && !g_BindingFailures.Length)
         return
 
-    text := "Quake Alacritty found " . g_ConfigWarnings.Length . " problem(s) in config.ini:`n`n"
+    total := g_ConfigWarnings.Length + g_BindingFailures.Length
+    text := "Quake Alacritty found " . total . " problem(s) at startup:`n`n"
     for warning in g_ConfigWarnings
         text .= "- " . warning . "`n"
+    for failure in g_BindingFailures
+        text .= "- Hotkey " . failure . "`n"
     text .= "`nFix the values, then use Tray -> Reload (or restart)."
     MsgBox(text, "Quake Alacritty config", "Icon!")
 }
 
-; Helper: Binds dynamic hotkeys from configuration
+; Helper: Binds dynamic hotkeys from configuration. Every failure is collected
+; instead of swallowed, so a typo in config.ini is visible at startup, in the
+; tray and in quake.log.
 RegisterHotkeys()
 {
-    ; Global visor toggle
+    global g_KeyToggleVisor
+
+    ; Global visor toggle. The last-resort #sc029 fallback is kept so the visor
+    ; stays reachable, but a fallback is a config problem and is reported as one.
     if (g_KeyToggleVisor != "")
     {
         try Hotkey(g_KeyToggleVisor, (*) => ToggleVisor())
         catch {
-            try Hotkey("#sc029", (*) => ToggleVisor())
+            try {
+                Hotkey("#sc029", (*) => ToggleVisor())
+                AddBindingFailure("Hotkeys.ToggleVisor", g_KeyToggleVisor, "invalid; fell back to #sc029")
+            } catch as err {
+                AddBindingFailure("Hotkeys.ToggleVisor", g_KeyToggleVisor, "invalid and the #sc029 fallback failed: " . err.Message)
+            }
         }
     }
+    else
+        LogWrite("INFO", "binding: Hotkeys.ToggleVisor is empty; toggle disabled")
 
     ; Context-sensitive hotkeys inside Alacritty
     HotIfWinActive("ahk_exe alacritty.exe")
 
-    RegisterKey(g_KeySplit,       (*) => SpawnSplit())
-    RegisterKey(g_KeyClose,       (*) => CloseSplit())
-    RegisterKey("!F4",            (*) => CloseSplit())
-    RegisterKey(g_KeyRetile,      (*) => TileAlacritty())
-    RegisterKey(g_KeyCycleLayout, (*) => CycleLayout())
-    RegisterKey(g_KeyFocusLeft,   (*) => FocusDirection("left"))
-    RegisterKey(g_KeyFocusRight,  (*) => FocusDirection("right"))
-    RegisterKey(g_KeyFocusUp,     (*) => FocusDirection("up"))
-    RegisterKey(g_KeyFocusDown,   (*) => FocusDirection("down"))
-    RegisterKey(g_KeySwapLeft,    (*) => SwapDirection("left"))
-    RegisterKey(g_KeySwapRight,   (*) => SwapDirection("right"))
-    RegisterKey(g_KeySwapUp,      (*) => SwapDirection("up"))
-    RegisterKey(g_KeySwapDown,    (*) => SwapDirection("down"))
-    RegisterKey(g_KeyRotate,         (*) => RotateWindows())
-    RegisterKey(g_KeyMoveVisorLeft,  (*) => MoveVisorDirection("left"))
-    RegisterKey(g_KeyMoveVisorRight, (*) => MoveVisorDirection("right"))
-    RegisterKey(g_KeyReload,      (*) => Reload())
+    RegisterKey(g_KeySplit,       (*) => SpawnSplit(),            "Hotkeys.SplitWindow")
+    RegisterKey(g_KeyClose,       (*) => CloseSplit(),            "Hotkeys.CloseWindow")
+    RegisterKey("!F4",            (*) => CloseSplit(),            "built-in Alt+F4")
+    RegisterKey(g_KeyRetile,      (*) => TileAlacritty(),         "Hotkeys.Retile")
+    RegisterKey(g_KeyCycleLayout, (*) => CycleLayout(),           "Hotkeys.CycleLayout")
+    RegisterKey(g_KeyFocusLeft,   (*) => FocusDirection("left"),  "Hotkeys.FocusLeft")
+    RegisterKey(g_KeyFocusRight,  (*) => FocusDirection("right"), "Hotkeys.FocusRight")
+    RegisterKey(g_KeyFocusUp,     (*) => FocusDirection("up"),    "Hotkeys.FocusUp")
+    RegisterKey(g_KeyFocusDown,   (*) => FocusDirection("down"),  "Hotkeys.FocusDown")
+    RegisterKey(g_KeySwapLeft,    (*) => SwapDirection("left"),   "Hotkeys.SwapLeft")
+    RegisterKey(g_KeySwapRight,   (*) => SwapDirection("right"),  "Hotkeys.SwapRight")
+    RegisterKey(g_KeySwapUp,      (*) => SwapDirection("up"),     "Hotkeys.SwapUp")
+    RegisterKey(g_KeySwapDown,    (*) => SwapDirection("down"),   "Hotkeys.SwapDown")
+    RegisterKey(g_KeyRotate,         (*) => RotateWindows(),          "Hotkeys.RotatePanes")
+    RegisterKey(g_KeyMoveVisorLeft,  (*) => MoveVisorDirection("left"),  "Hotkeys.MoveVisorLeft")
+    RegisterKey(g_KeyMoveVisorRight, (*) => MoveVisorDirection("right"), "Hotkeys.MoveVisorRight")
+    RegisterKey(g_KeyReload,      (*) => Reload(),                "Hotkeys.ReloadScript")
 
     HotIfWinActive()
 }
 
-RegisterKey(keyName, callback)
+RegisterKey(keyName, callback, label := "")
 {
-    if (keyName != "")
+    if (keyName == "")
     {
-        hookKey := (InStr(keyName, "#") && !InStr(keyName, "$")) ? ("$" . keyName) : keyName
-        try Hotkey(hookKey, callback)
-        catch {
-            try Hotkey(keyName, callback)
+        LogWrite("INFO", "binding: " . label . " is empty; disabled")
+        return
+    }
+    hookKey := (InStr(keyName, "#") && !InStr(keyName, "$")) ? ("$" . keyName) : keyName
+    try {
+        Hotkey(hookKey, callback)
+        return
+    } catch {
+        ; Some keys (e.g. with a forced hook prefix) only bind without it.
+        try {
+            Hotkey(keyName, callback)
+            return
+        } catch as plainErr {
+            AddBindingFailure(label, keyName, plainErr.Message)
         }
     }
 }
@@ -697,6 +843,31 @@ GetMouseMonitor()
 ; Window Tiling Engine
 ; -------------------------------------------------------------
 
+; Moves one pane and records why a move failed. A closed window and an invalid
+; rectangle are different bugs - the first is a race with the user or a dying
+; process, the second is ours - and both used to vanish into `try WinMove`.
+; Returns true only when the move was actually issued.
+MovePane(hwnd, x, y, w, h)
+{
+    if (!WinExist("ahk_id " hwnd))
+    {
+        LogWrite("INFO", "tile: pane " . hwnd . " is gone before move (" . x . "," . y . " " . w . "x" . h . ")")
+        return false
+    }
+    if (w <= 0 || h <= 0)
+    {
+        LogWrite("ERROR", "tile: invalid rectangle for pane " . hwnd . ": " . x . "," . y . " " . w . "x" . h)
+        return false
+    }
+    try {
+        WinMove(x, y, w, h, "ahk_id " hwnd)
+        return true
+    } catch as err {
+        LogWrite("ERROR", "tile: WinMove failed for pane " . hwnd . " (" . x . "," . y . " " . w . "x" . h . "): " . err.Message)
+        return false
+    }
+}
+
 ; Helper: Tiles Alacritty windows dynamically:
 ; 1 window:  Top 100% width, 40% height (or 50% width full-height if positioned left/right)
 ; 2 windows: Configurable 2-pane mode (side-by-side visor/full, left-stacked, right-stacked)
@@ -800,18 +971,18 @@ TileAlacritty(targetMon := 0, syncWindows := true)
         if (curSinglePaneSide == "left")
         {
             thisW := Floor((totalWidth - gap) / 2)
-            try WinMove(wLeft, wTop, thisW, totalHeight, "ahk_id " hwnd)
+            MovePane(hwnd, wLeft, wTop, thisW, totalHeight)
         }
         else if (curSinglePaneSide == "right")
         {
             thisW := Floor((totalWidth - gap) / 2)
             currentX := wLeft + totalWidth - thisW
-            try WinMove(currentX, wTop, thisW, totalHeight, "ahk_id " hwnd)
+            MovePane(hwnd, currentX, wTop, thisW, totalHeight)
         }
         else
         {
             topHeight := Floor(totalHeight * g_VisorHeightPercent)
-            try WinMove(wLeft, wTop, totalWidth, topHeight, "ahk_id " hwnd)
+            MovePane(hwnd, wLeft, wTop, totalWidth, topHeight)
         }
         return
     }
@@ -827,10 +998,10 @@ TileAlacritty(targetMon := 0, syncWindows := true)
             h1 := Floor(availHeight / 2)
             h2 := availHeight - h1
 
-            try WinMove(wLeft, wTop, totalWidth, h1, "ahk_id " windows[1])
+            MovePane(windows[1], wLeft, wTop, totalWidth, h1)
             if (gap > 0)
                 CreateDivider(targetMon, wLeft, wTop + h1, totalWidth, gap, g_BorderColor)
-            try WinMove(wLeft, wTop + h1 + gap, totalWidth, h2, "ahk_id " windows[2])
+            MovePane(windows[2], wLeft, wTop + h1 + gap, totalWidth, h2)
         }
         else if (curTwoPaneLayout == "left-stacked")
         {
@@ -839,10 +1010,10 @@ TileAlacritty(targetMon := 0, syncWindows := true)
             h1 := Floor(availHeight / 2)
             h2 := availHeight - h1
 
-            try WinMove(wLeft, wTop, colW, h1, "ahk_id " windows[1])
+            MovePane(windows[1], wLeft, wTop, colW, h1)
             if (gap > 0)
                 CreateDivider(targetMon, wLeft, wTop + h1, colW, gap, g_BorderColor)
-            try WinMove(wLeft, wTop + h1 + gap, colW, h2, "ahk_id " windows[2])
+            MovePane(windows[2], wLeft, wTop + h1 + gap, colW, h2)
         }
         else if (curTwoPaneLayout == "right-stacked")
         {
@@ -852,10 +1023,10 @@ TileAlacritty(targetMon := 0, syncWindows := true)
             h1 := Floor(availHeight / 2)
             h2 := availHeight - h1
 
-            try WinMove(leftX, wTop, colW, h1, "ahk_id " windows[1])
+            MovePane(windows[1], leftX, wTop, colW, h1)
             if (gap > 0)
                 CreateDivider(targetMon, leftX, wTop + h1, colW, gap, g_BorderColor)
-            try WinMove(leftX, wTop + h1 + gap, colW, h2, "ahk_id " windows[2])
+            MovePane(windows[2], leftX, wTop + h1 + gap, colW, h2)
         }
         else ; "side-by-side-visor" or "side-by-side-full"
         {
@@ -864,10 +1035,10 @@ TileAlacritty(targetMon := 0, syncWindows := true)
             col1W := Floor(availWidth / 2)
             col2W := availWidth - col1W
 
-            try WinMove(wLeft, wTop, col1W, paneHeight, "ahk_id " windows[1])
+            MovePane(windows[1], wLeft, wTop, col1W, paneHeight)
             if (gap > 0)
                 CreateDivider(targetMon, wLeft + col1W, wTop, gap, paneHeight, g_BorderColor)
-            try WinMove(wLeft + col1W + gap, wTop, col2W, paneHeight, "ahk_id " windows[2])
+            MovePane(windows[2], wLeft + col1W + gap, wTop, col2W, paneHeight)
         }
         return
     }
@@ -890,21 +1061,21 @@ TileAlacritty(targetMon := 0, syncWindows := true)
             bot2W       := availWidth - bot1W
 
             ; Window 1: Top Master
-            try WinMove(wLeft, wTop, totalWidth, topHeight, "ahk_id " windows[1])
+            MovePane(windows[1], wLeft, wTop, totalWidth, topHeight)
 
             ; Full-width horizontal divider
             if (gap > 0)
                 CreateDivider(targetMon, wLeft, wTop + topHeight, totalWidth, gap, g_BorderColor)
 
             ; Window 2: Bottom-Left
-            try WinMove(wLeft, botY, bot1W, botHeight, "ahk_id " windows[2])
+            MovePane(windows[2], wLeft, botY, bot1W, botHeight)
 
             ; Bottom vertical divider
             if (gap > 0)
                 CreateDivider(targetMon, wLeft + bot1W, botY, gap, botHeight, g_BorderColor)
 
             ; Window 3: Bottom-Right
-            try WinMove(wLeft + bot1W + gap, botY, bot2W, botHeight, "ahk_id " windows[3])
+            MovePane(windows[3], wLeft + bot1W + gap, botY, bot2W, botHeight)
         }
         else if (curTileLayout == "left")
         {
@@ -919,21 +1090,21 @@ TileAlacritty(targetMon := 0, syncWindows := true)
             h2          := availHeight - h1
 
             ; Window 1: Left Master (100% height)
-            try WinMove(wLeft, wTop, masterWidth, totalHeight, "ahk_id " windows[1])
+            MovePane(windows[1], wLeft, wTop, masterWidth, totalHeight)
 
             ; Full-height vertical divider
             if (gap > 0)
                 CreateDivider(targetMon, wLeft + masterWidth, wTop, gap, totalHeight, g_BorderColor)
 
             ; Window 2: Top-Right
-            try WinMove(rightX, wTop, rightWidth, h1, "ahk_id " windows[2])
+            MovePane(windows[2], rightX, wTop, rightWidth, h1)
 
             ; Horizontal divider in right column
             if (gap > 0)
                 CreateDivider(targetMon, rightX, wTop + h1, rightWidth, gap, g_BorderColor)
 
             ; Window 3: Bottom-Right
-            try WinMove(rightX, wTop + h1 + gap, rightWidth, h2, "ahk_id " windows[3])
+            MovePane(windows[3], rightX, wTop + h1 + gap, rightWidth, h2)
         }
         else if (curTileLayout == "right")
         {
@@ -949,21 +1120,21 @@ TileAlacritty(targetMon := 0, syncWindows := true)
             h2          := availHeight - h1
 
             ; Window 1: Top-Left
-            try WinMove(wLeft, wTop, leftWidth, h1, "ahk_id " windows[1])
+            MovePane(windows[1], wLeft, wTop, leftWidth, h1)
 
             ; Horizontal divider in left column
             if (gap > 0)
                 CreateDivider(targetMon, wLeft, wTop + h1, leftWidth, gap, g_BorderColor)
 
             ; Window 3: Bottom-Left
-            try WinMove(wLeft, wTop + h1 + gap, leftWidth, h2, "ahk_id " windows[3])
+            MovePane(windows[3], wLeft, wTop + h1 + gap, leftWidth, h2)
 
             ; Full-height vertical divider
             if (gap > 0)
                 CreateDivider(targetMon, wLeft + leftWidth, wTop, gap, totalHeight, g_BorderColor)
 
             ; Window 2: Right Master (100% height)
-            try WinMove(rightX, wTop, masterWidth, totalHeight, "ahk_id " windows[2])
+            MovePane(windows[2], rightX, wTop, masterWidth, totalHeight)
         }
         else ; "bottom" (default)
         {
@@ -978,21 +1149,21 @@ TileAlacritty(targetMon := 0, syncWindows := true)
             top2W       := availWidth - top1W
 
             ; Window 1: Top-Left
-            try WinMove(wLeft, wTop, top1W, topHeight, "ahk_id " windows[1])
+            MovePane(windows[1], wLeft, wTop, top1W, topHeight)
 
             ; Top vertical divider
             if (gap > 0)
                 CreateDivider(targetMon, wLeft + top1W, wTop, gap, topHeight, g_BorderColor)
 
             ; Window 2: Top-Right
-            try WinMove(wLeft + top1W + gap, wTop, top2W, topHeight, "ahk_id " windows[2])
+            MovePane(windows[2], wLeft + top1W + gap, wTop, top2W, topHeight)
 
             ; Full-width horizontal divider
             if (gap > 0)
                 CreateDivider(targetMon, wLeft, wTop + topHeight, totalWidth, gap, g_BorderColor)
 
             ; Window 3: Bottom Master (100% width)
-            try WinMove(wLeft, botY, totalWidth, botHeight, "ahk_id " windows[3])
+            MovePane(windows[3], wLeft, botY, totalWidth, botHeight)
         }
         return
     }
@@ -1016,7 +1187,7 @@ TileAlacritty(targetMon := 0, syncWindows := true)
         idx := A_Index
         hwnd := windows[idx]
         thisW := (idx == topCount) ? (wLeft + totalWidth - currentX) : baseTopColWidth
-        try WinMove(currentX, wTop, thisW, topHeight, "ahk_id " hwnd)
+        MovePane(hwnd, currentX, wTop, thisW, topHeight)
         currentX += thisW
 
         if (idx < topCount && gap > 0)
@@ -1040,7 +1211,7 @@ TileAlacritty(targetMon := 0, syncWindows := true)
             idx := A_Index
             hwnd := windows[topCount + idx]
             thisW := (idx == botCount) ? (wLeft + totalWidth - currentX) : baseBotColWidth
-            try WinMove(currentX, botY, thisW, botHeight, "ahk_id " hwnd)
+            MovePane(hwnd, currentX, botY, thisW, botHeight)
             currentX += thisW
 
             if (idx < botCount && gap > 0)
@@ -1582,24 +1753,69 @@ CycleLayout()
 ; Window Management Actions
 ; -------------------------------------------------------------
 
-; Helper: Resolves the configured shell executable from alacritty.toml
-GetConfiguredShell()
+; Helper: Resolves the configured shell executable from alacritty.toml.
+; Only the [terminal.shell] table counts: the previous version took the first
+; `program = "..."` anywhere in the file, so a commented-out shell or an
+; unrelated table (e.g. a keybinding action) could win. Comments are ignored and
+; the current table header is tracked line by line.
+GetConfiguredShellInfo(tomlPath := "")
 {
-    appDataToml := EnvGet("APPDATA") . "\alacritty\alacritty.toml"
-    localToml   := A_ScriptDir . "\alacritty.toml"
-    tomlPath := FileExist(appDataToml) ? appDataToml : (FileExist(localToml) ? localToml : "")
-
-    if (tomlPath != "")
+    if (tomlPath == "")
     {
-        try {
-            content := FileRead(tomlPath)
-            if RegExMatch(content, 'i)program\s*=\s*"([^"]+)"', &m)
-            {
-                return m[1]
-            }
+        appDataToml := EnvGet("APPDATA") . "\alacritty\alacritty.toml"
+        localToml   := A_ScriptDir . "\alacritty.toml"
+        tomlPath := FileExist(appDataToml) ? appDataToml : (FileExist(localToml) ? localToml : "")
+    }
+
+    if (tomlPath == "")
+        return { program: "powershell.exe", source: "default (alacritty.toml not found)" }
+
+    try {
+        content := FileRead(tomlPath, "UTF-8")
+    } catch as err {
+        return { program: "powershell.exe", source: "default (alacritty.toml unreadable: " . err.Message . ")" }
+    }
+
+    section := ""
+    for line in StrSplit(content, "`n", "`r")
+    {
+        trimmed := Trim(line)
+        if (trimmed == "" || SubStr(trimmed, 1, 1) == "#")
+            continue
+        if (RegExMatch(trimmed, "^\[\[?([^\]]+)\]\]?$", &header))
+        {
+            section := Trim(header[1])
+            continue
+        }
+        if (section != "terminal.shell")
+            continue
+        if (RegExMatch(trimmed, "^program\s*=\s*(?:`"([^`"]*)`"|'([^']*)')", &m))
+        {
+            ; Basic strings (double quotes) escape backslashes, so a Windows path
+            ; arrives as C:\\Users\\...; literal strings (single quotes) do not.
+            ; Unescape before launching or reporting, otherwise every path in the
+            ; log and diagnostics carries doubled separators.
+            program := (m[1] != "") ? UnescapeTomlBasicString(m[1]) : m[2]
+            if (program != "")
+                return { program: program, source: "alacritty.toml [terminal.shell]" }
+            return { program: "powershell.exe", source: "default ([terminal.shell] program is empty)" }
         }
     }
-    return "powershell.exe"
+    return { program: "powershell.exe", source: "default (no [terminal.shell] program in alacritty.toml)" }
+}
+
+GetConfiguredShell()
+{
+    return GetConfiguredShellInfo().program
+}
+
+; Undoes the escapes that matter for a shell path in a TOML basic string:
+; `\\` (every Windows separator) and `\"`. Other escapes cannot appear in a
+; valid executable path, so they are left untouched rather than guessed at.
+UnescapeTomlBasicString(value)
+{
+    value := StrReplace(value, "\\", "\")
+    return StrReplace(value, "\`"", "`"")
 }
 
 ; Backward-compatible alias
@@ -1796,7 +2012,7 @@ ShowAlacrittyNotFoundMessage()
 ; Helper: Launches an Alacritty process, injecting welcome cheat sheet if configured and shell is PowerShell
 LaunchTerminalProcess()
 {
-    global g_ShowHelpOnStart, g_FirstRun, g_ConfigFile
+    global g_ShowHelpOnStart, g_FirstRun
     startDir := GetStartingDirectory()
     shouldShowHelp := (g_ShowHelpOnStart == "tip" || g_ShowHelpOnStart == "banner") || (g_ShowHelpOnStart == "first-run" && g_FirstRun)
 
@@ -1814,16 +2030,18 @@ LaunchTerminalProcess()
             if (welcomeScript != "")
             {
                 argFlag := (g_ShowHelpOnStart == "tip") ? " -TipOnly -Startup" : " -Startup"
-                launchArgs := Format('-e {1} -NoLogo -NoExit -ExecutionPolicy Bypass -File "{2}"{3}', configuredShell, welcomeScript, argFlag)
+                ; Quote the shell: a custom install such as
+                ; "C:\Program Files\PowerShell\7\pwsh.exe" used to split at the
+                ; first space and fail.
+                launchArgs := Format('-e "{1}" -NoLogo -NoExit -ExecutionPolicy Bypass -File "{2}"{3}', configuredShell, welcomeScript, argFlag)
                 if (!LaunchAlacritty(launchArgs, startDir))
                     return false
 
-                if (g_ShowHelpOnStart == "first-run" && g_FirstRun)
-                {
-                    g_FirstRun := false
-                    if (g_ConfigFile != "" && FileExist(g_ConfigFile))
-                        try IniWrite("false", g_ConfigFile, "General", "FirstRun")
-                }
+                ; FirstRun is a first-*launch* flag, not a first-use-of-the-mode
+                ; flag: the first successful launch consumes it whatever
+                ; ShowHelpOnStart is, which is what the docs have always said.
+                if (g_FirstRun)
+                    MarkFirstRunConsumed()
                 return true
             }
         }
@@ -1836,13 +2054,11 @@ LaunchTerminalProcess()
     if (!LaunchAlacritty("", startDir))
         return false
 
-    ; Clean first-run flag only after the terminal actually started
+    ; Clean first-run flag only after the terminal actually started. The flag is
+    ; consumed via a marker file: IniWrite would rewrite the UTF-8 config in the
+    ; ANSI code page and mangle non-ASCII comments.
     if (g_FirstRun)
-    {
-        g_FirstRun := false
-        if (g_ConfigFile != "" && FileExist(g_ConfigFile))
-            try IniWrite("false", g_ConfigFile, "General", "FirstRun")
-    }
+        MarkFirstRunConsumed()
 
     return true
 }
@@ -2511,6 +2727,10 @@ HandleDisplayChange()
             g_MonitorDividers.Delete(monId)
     }
 
+    ; A disconnect is worth a log line even when it orphaned no live pane.
+    if (invalidMons.Length > 0)
+        LogWrite("WARN", "display: monitor(s) " . JoinArray(invalidMons, ",") . " disappeared; migrating " . migratedWindows.Length . " pane(s) to monitor " . primaryMon)
+
     ; 3. If windows need migration to primary monitor
     if (migratedWindows.Length > 0)
     {
@@ -2774,7 +2994,7 @@ WatchdogCheck()
 ; Configures the system notification area (tray) context menu
 SetupTrayMenu()
 {
-    global g_ConfigWarnings
+    global g_ConfigWarnings, g_BindingFailures
     tray := A_TrayMenu
     tray.Delete()
     tray.Add("Quake Alacritty v" . g_AppVersion, (*) => Run("https://github.com/orgNero/quake-alacritty"))
@@ -2782,14 +3002,124 @@ SetupTrayMenu()
     tray.Add()
     tray.Add("Report Bug / Request Feature", (*) => Run("https://github.com/orgNero/quake-alacritty/issues/new/choose"))
     tray.Add("Documentation & Shortcuts", (*) => Run("https://github.com/orgNero/quake-alacritty#readme"))
-    if (g_ConfigWarnings.Length)
+    tray.Add()
+    tray.Add("Open log", (*) => OpenLogFile())
+    tray.Add("Copy diagnostics", (*) => CopyDiagnostics())
+    problemCount := g_ConfigWarnings.Length + g_BindingFailures.Length
+    if (problemCount)
     {
         tray.Add()
-        tray.Add("Config warnings (" . g_ConfigWarnings.Length . ")", (*) => ShowConfigWarnings())
+        tray.Add("Config warnings (" . problemCount . ")", (*) => ShowConfigWarnings())
     }
     tray.Add()
     tray.Add("Reload Quake Alacritty", (*) => Reload())
     tray.Add("Exit", (*) => ExitApp())
+}
+
+; Opens quake.log in Notepad. The default handler for .log is not guaranteed, and
+; the log must always be reachable when something goes wrong.
+OpenLogFile()
+{
+    global g_LogPath
+    if (g_LogPath == "" || !FileExist(g_LogPath))
+    {
+        MsgBox("No log file yet.`n`nThe log is written to " . g_LogPath . " as soon as the visor starts.", "Quake Alacritty", "Iconi")
+        return
+    }
+    try Run('notepad.exe "' . g_LogPath . '"')
+    catch as err
+        MsgBox("Could not open " . g_LogPath . ":`n`n" . err.Message, "Quake Alacritty", "Icon!")
+}
+
+; Copies a support report to the clipboard. Personal paths are replaced with
+; %APPDATA% / %USERPROFILE% so the text can be pasted into a public issue.
+CopyDiagnostics()
+{
+    ; Building the report reads the log and enumerates windows; a diagnostics
+    ; command must never raise its own error dialog.
+    try {
+        text := BuildDiagnosticsText()
+        A_Clipboard := text
+        TrayTip("Diagnostics copied to the clipboard. Personal paths were shortened.", "Quake Alacritty", "Iconi Mute")
+    } catch as err {
+        MsgBox("Could not copy diagnostics:`n`n" . err.Message, "Quake Alacritty", "Icon!")
+    }
+}
+
+BuildDiagnosticsText()
+{
+    global g_AppVersion, g_ConfigFile, g_LogPath, g_ConfigWarnings, g_BindingFailures
+    global g_MultiMonitorMode, g_ShowHelpOnStart, g_FirstRun
+
+    lines := []
+    lines.Push("Quake Alacritty v" . g_AppVersion)
+    lines.Push("AutoHotkey " . A_AhkVersion . (A_Is64bitOS ? " (64-bit OS)" : " (32-bit OS)"))
+    lines.Push("Windows " . A_OSVersion)
+    lines.Push("Mode: " . g_MultiMonitorMode . "; ShowHelpOnStart=" . g_ShowHelpOnStart . "; FirstRun pending=" . (g_FirstRun ? "yes" : "no"))
+    lines.Push("Shell: " . GetConfiguredShell())
+    lines.Push("Panes: " . GetAlacrittyWindows().Length . " window(s)")
+    lines.Push("Monitors: " . MonitorGetCount())
+    Loop MonitorGetCount() {
+        MonitorGetWorkArea(A_Index, &l, &t, &r, &b)
+        suffix := (A_Index == MonitorGetPrimary()) ? " (primary)" : ""
+        lines.Push("  #" . A_Index . ": " . (r - l) . "x" . (b - t) . " at " . l . "," . t . suffix)
+    }
+    lines.Push("Config: " . ScrubDiagnosticPath(g_ConfigFile))
+    lines.Push("Log: " . ScrubDiagnosticPath(g_LogPath))
+
+    if (g_ConfigWarnings.Length || g_BindingFailures.Length)
+    {
+        lines.Push("")
+        lines.Push("Config problems:")
+        for warning in g_ConfigWarnings
+            lines.Push("  - " . warning)
+        for failure in g_BindingFailures
+            lines.Push("  - Hotkey " . failure)
+    }
+
+    tail := ReadLogTail(40)
+    if (tail.Length)
+    {
+        lines.Push("")
+        lines.Push("Last " . tail.Length . " log line(s):")
+        for line in tail
+            lines.Push("  " . ScrubDiagnosticPath(line))
+    }
+
+    return JoinArray(lines, "`r`n")
+}
+
+; Shortens personal paths for public issue text. Tokens, not deletions, so the
+; report still says where a file lives.
+ScrubDiagnosticPath(text)
+{
+    if (text == "")
+        return text
+    for envName in ["APPDATA", "USERPROFILE", "LOCALAPPDATA"]
+    {
+        value := EnvGet(envName)
+        if (value != "")
+            text := StrReplace(text, value, "%" . envName . "%")
+    }
+    return text
+}
+
+ReadLogTail(maxLines)
+{
+    global g_LogPath
+    if (g_LogPath == "" || !FileExist(g_LogPath))
+        return []
+    try {
+        text := FileRead(g_LogPath, "UTF-8")
+    } catch {
+        return []
+    }
+    lines := StrSplit(text, "`n", "`r")
+    while (lines.Length && Trim(lines[lines.Length]) == "")
+        lines.Pop()
+    if (lines.Length > maxLines)
+        lines.RemoveAt(1, lines.Length - maxLines)
+    return lines
 }
 
 ; Reads the deployed VERSION marker (repo or %APPDATA%\alacritty) so the version
@@ -2822,7 +3152,10 @@ MaybeCheckForUpdates()
     else if FileExist(EnvGet("APPDATA") . "\alacritty\update-check.ps1")
         checker := EnvGet("APPDATA") . "\alacritty\update-check.ps1"
     if (checker == "")
+    {
+        LogWrite("WARN", "update-check: update-check.ps1 not found; skipping")
         return
+    }
 
     ; Only nextCheckAtUtc is needed: fixed-width UTC digits compare correctly.
     nextCheck := ""
@@ -2845,6 +3178,9 @@ MaybeCheckForUpdates()
     try {
         Run('"' . psExe . '" -NoProfile -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -File "' . checker . '"', , "Hide")
         g_LastUpdateCheckSpawn := A_TickCount
+        LogWrite("INFO", "update-check: spawned background check")
+    } catch as err {
+        LogWrite("WARN", "update-check: could not spawn checker: " . err.Message)
     }
 }
 
@@ -2868,9 +3204,16 @@ OnCloseMessage(wParam, lParam, msg, hwnd)
 ; -------------------------------------------------------------
 ; Script Initialization
 ; -------------------------------------------------------------
+InitLog()
+LogWrite("INFO", "---- Quake Alacritty starting ----")
 LoadConfig()
 ReadAppVersion()
+LogWrite("INFO", "start: v" . g_AppVersion . "; AutoHotkey " . A_AhkVersion . "; Windows " . A_OSVersion . "; mode=" . g_MultiMonitorMode)
+shellInfo := GetConfiguredShellInfo()
+shellLevel := InStr(shellInfo.source, "unreadable") ? "WARN" : "INFO"
+LogWrite(shellLevel, "shell: " . shellInfo.program . " (" . shellInfo.source . ")")
 RegisterHotkeys()
+LogConfigProblems()
 MaybeCheckForUpdates()
 OnMessage(0x007E, OnDisplayChange)
 OnMessage(0x0010, OnCloseMessage)
@@ -2880,8 +3223,13 @@ SetupTrayMenu()
 
 ; Report rejected config values once per start. Silence on a valid config; the
 ; tray keeps a "Config warnings" entry so the list stays reachable afterwards.
+; Binding failures get the non-blocking report specified for them (a toast) and
+; are folded into the same tray entry and log; a bad hotkey must not block
+; startup behind a modal dialog.
 if (g_ConfigWarnings.Length)
     ShowConfigWarnings()
+if (g_BindingFailures.Length)
+    TrayTip(g_BindingFailures.Length . " hotkey binding(s) failed. Tray -> Config warnings for details; the list is also in quake.log.", "Quake Alacritty", "Icon!")
 
 ; Sync any existing windows and restore layout if already visible on startup/reload
 SyncMonitorWindows()
