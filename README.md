@@ -39,7 +39,7 @@ Features mouse-aware multi-monitor detection, dynamic 2×2 quad grid tiling, acr
 * **Auto-Rebalancing & Transitions (`Alt + W` / `Alt + F4`):** Closing any terminal automatically collapses and re-tiles the remaining ones (supported via `Alt + W`, `Alt + F4`, or shell `exit`). Closing a stacked split preserves the remaining terminal on its half-screen column without snapping to full-width visor. Terminal focus is only reclaimed when a pane already owned it, so a pane exiting in a background or hidden visor re-tiles silently instead of pulling you out of whatever app you switched to.
 * **Keyboard Pane Navigation (`Alt + Arrows`):** Hop typing focus between splits without touching the mouse, featuring deterministic tie-breaking across asymmetrical master layouts.
 * **Window Swapping & Rotation (`Alt + Shift + Arrows`, `Alt + Shift + Space`):** Rearrange panes on the fly by swapping with adjacent windows or rotating all positions cyclically without losing keyboard focus.
-* **In-Terminal Startup Help Hint & Cheat Sheet (`quake-help`, `quake-env`):** Displays a sleek 1-line reminder (`💡 Tip: Type 'quake-help' to view keyboard shortcuts`) on every terminal start. Configurable via `ShowHelpOnStart` in `config.ini` (`tip` for sleek 1-line hint, `banner` for full 20-line table, `none` for silent startup, `first-run` for a one-time tip after install — `FirstRun` is cleared by the first launch, whatever this setting is, so switching to `first-run` later usually shows nothing). Running `quake-help` displays the full electric cyan quickstart cheat sheet on demand anytime, while `quake-env` inspects your setup (OS, AutoHotkey, Alacritty, displays) and copies formatted Markdown to the clipboard for rapid bug reporting.
+* **In-Terminal Startup Help Hint & Cheat Sheet (`quake-help`, `quake-env`):** Displays a sleek 1-line reminder (`💡 Tip: Type 'quake-help' to view keyboard shortcuts`) on every terminal start. Configurable via `ShowHelpOnStart` in `config.ini` (`tip` for sleek 1-line hint, `banner` for full 20-line table, `none` for silent startup, `first-run` for a one-time tip after install — the one-time tip is remembered in `%APPDATA%\alacritty\.first-run-consumed`, so switching to `first-run` later usually shows nothing). Running `quake-help` displays the full electric cyan quickstart cheat sheet on demand anytime, while `quake-env` inspects your setup (OS, AutoHotkey, Alacritty, displays) and copies formatted Markdown to the clipboard for rapid bug reporting.
 * **One-Word Updates (`quake-update`):** `quake-update` checks for a newer release and upgrades a Git clone in place (fast-forward pull + installer), and re-deploys when the clone is already ahead of the installed copy. ZIP installs download the release archive, compare it with the SHA-256 published in the release notes when a release includes one, and run the extracted installer. `quake-update --check` (`-Check` in PowerShell) reports the version without changing anything.
 * **Once-a-Day Update Notice:** When the cached background check has seen a newer published release, terminal startup prints a single line — `⬆ Update available: vX (you have vY). Type 'quake-update'.` — at most once per calendar day. The line comes from the local cache only (no network on launch), `quake-help` shows it while an update is pending, and `QUAKE_SHOW_HELP=none` suppresses startup messages.
 * **Taskbar Awareness:** Respects custom work areas (such as left-docked taskbars) using `MonitorGetWorkArea`.
@@ -284,7 +284,9 @@ ReloadScript=!^r
 > After saving changes in `config.ini`, press **`Alt + Ctrl + R`** while inside Alacritty to instantly reload settings without restarting the terminal!
 
 > [!NOTE]
-> Out-of-range or unrecognized values are not silently replaced. A bad `BorderGap`, `VisorHeightPercent`, `MultiMonitorMode` or `ShowHelpOnStart` value is reported in a dialog at startup and stays reachable from the tray menu under **Config warnings**; the rest of the file still loads. Hotkey values may carry a trailing `; comment` — text after the first `;` is ignored. A hotkey string that is still invalid after that binds nothing, and reporting failed bindings is planned with the config log.
+> Out-of-range or unrecognized values are not silently replaced. A bad `BorderGap`, `VisorHeightPercent`, `MultiMonitorMode` or `ShowHelpOnStart` value is reported in a dialog at startup and stays reachable from the tray menu under **Config warnings**; the rest of the file still loads. Hotkey values may carry a trailing `; comment` — text after the first `;` is ignored. A hotkey string that is still invalid binds nothing and is reported at startup (tray tooltip plus the same **Config warnings** entry), and a failed `ToggleVisor` falls back to `#sc029` while saying so. Every config and binding problem is also written to `quake.log`; see **Diagnostics log** below.
+>
+> Values must stay **ASCII**. The file is deployed as UTF-8, but Windows reads INI values through the system ANSI code page (only UTF-16 files are treated as Unicode), so a non-ASCII path such as `C:\Users\José` is not supported. Comments may be UTF-8 — they are never parsed as values.
 
 ### Adjusting Opacity & Blur
 Edit [`alacritty.toml`](src/alacritty.toml):
@@ -318,6 +320,9 @@ args = ["--login", "-i"]
 program = "powershell.exe"
 ```
 
+> [!NOTE]
+> The wrapper reads only the `program` key of the `[terminal.shell]` table (comment lines are ignored) to decide whether the startup tip/cheat sheet can be injected. A commented-out or unrelated `program = "..."` elsewhere in the file no longer wins. Custom shell paths with spaces are quoted when the welcome script is launched, and TOML backslash escapes in a double-quoted value (`"C:\\Users\\..."`) are decoded before use.
+
 ---
 
 ## 🗑️ Uninstallation
@@ -338,7 +343,7 @@ The uninstaller:
 - Removes the Windows Startup shortcut.
 - Removes the per-user "Installed Apps" registry entry (`HKCU\Software\Microsoft\Windows\CurrentVersion\Uninstall\QuakeAlacritty`).
 - Cleans up the `quake-help`, `quake-env` and `quake-update` commands from your PowerShell `$PROFILE` and Git Bash `~/.bashrc`.
-- Removes deployed application files and installer artifacts (`.install-state.json`, `.update-check.json`, `.update-notice`, `VERSION`, `CONFIG_SCHEMA`, `quake_common.ps1`, `update.ps1`, `update-check.ps1`) while giving you the option to keep or delete your custom configuration files (`config.ini` and `alacritty.toml`). Choosing to delete the configuration also removes the timestamped `.bak` backups and the now-empty install folder.
+- Removes deployed application files and installer artifacts (`.install-state.json`, `.update-check.json`, `.update-notice`, `.first-run-consumed`, `quake.log`, `quake.log.1`, `VERSION`, `CONFIG_SCHEMA`, `quake_common.ps1`, `update.ps1`, `update-check.ps1`) while giving you the option to keep or delete your custom configuration files (`config.ini` and `alacritty.toml`). Choosing to delete the configuration also removes the timestamped `.bak` backups and the now-empty install folder.
 
 > **Hidden panes keep running.** The visor hides terminal windows instead of closing them, so a pane you have not opened in days can still hold a shell. Uninstalling removes the manager and its files, but those shells persist until you close or reboot. Run `Get-Process alacritty` afterwards to confirm nothing is left over.
 
@@ -408,6 +413,11 @@ The uninstaller:
   AlacrittyPath=C:\full\path\to\alacritty.exe
   ```
   This key is not part of the default template, so leaving it out keeps the normal resolution order (`PATH` → `%LOCALAPPDATA%\Programs\Alacritty` → `%ProgramFiles%\Alacritty`).
+
+**Diagnostics log (`quake.log`)**
+- Every failure that used to be silent is appended to `%APPDATA%\alacritty\quake.log`: rejected config values, failed hotkey bindings (including a `ToggleVisor` fallback), failed window moves, monitor migrations, shell-resolution problems and update-check outcomes. The file is UTF-8, append-only, and rotates once at 256 KB (`quake.log.1`).
+- Right-click the tray icon → **Open log** to read it, or **Copy diagnostics** to copy a report to the clipboard. The report contains the version, AutoHotkey/Windows versions, monitor layout, resolved shell, pane count, config problems and the last 40 log lines, with `%APPDATA%`/`%USERPROFILE%` shortened to tokens so it is safe to paste into a public issue.
+- `TrayTip` notifications are dropped when Windows notifications are off, so the log and the **Config warnings** tray entry are the reliable record — not the toast.
 
 ---
 
