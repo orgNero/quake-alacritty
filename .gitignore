@@ -18,3 +18,9 @@ $RECYCLE.BIN/
 # Local agent instructions (not published)
 AGENTS.md
 GEMINI.md
+
+# orch-harness rig (local orchestration scaffolding, not published)
+/ORCH/
+/rules/
+/decisions/
+/DECISIONS.md
