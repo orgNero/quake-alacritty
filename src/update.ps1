@@ -193,30 +193,25 @@ function Invoke-QuakeZipUpdate {
             $ProgressPreference = $progressPreference
         }
 
-        $publishedHash = $null
-        if (-not [string]::IsNullOrWhiteSpace([string]$check.ReleaseBody)) {
-            # The notes carry a "**SHA-256** (`asset.zip`): `<hash>`" line.
-            foreach ($line in ([string]$check.ReleaseBody -split "`r?`n")) {
-                if ($line -notmatch '(?i)SHA-?256') { continue }
-                $hashMatch = [regex]::Match($line, '(?i)\b[0-9a-f]{64}\b')
-                if ($hashMatch.Success) {
-                    $publishedHash = $hashMatch.Value.ToLowerInvariant()
-                    break
-                }
-            }
+        $digest = Get-QuakeArchiveDigestFromNotes -Body ([string]$check.ReleaseBody)
+        if ($digest.State -eq 'missing') {
+            Write-Host "The release notes carry no SHA-256 digest; refusing to install an unverified archive."
+            Write-Host "Download manually: $releasesUrl"
+            return 1
+        }
+        if ($digest.State -eq 'malformed') {
+            Write-Host "The release notes mention SHA-256 but carry no valid 64-character digest; refusing to install an unverified archive."
+            Write-Host "Download manually: $releasesUrl"
+            return 1
         }
 
-        if ($publishedHash) {
-            $actualHash = (Get-FileHash -Path $zipPath -Algorithm SHA256).Hash.ToLowerInvariant()
-            if ($actualHash -ne $publishedHash) {
-                Write-Host "The downloaded archive does not match the SHA-256 published in the release notes."
-                Write-Host "Nothing was installed. Download manually: $releasesUrl"
-                return 1
-            }
-            Write-Host "  [Verify] SHA-256 matches the release notes"
-        } else {
-            Write-Host "  [Verify] No SHA-256 in the release notes; downloaded over HTTPS from GitHub"
+        $actualHash = (Get-FileHash -Path $zipPath -Algorithm SHA256).Hash.ToLowerInvariant()
+        if ($actualHash -ne $digest.Hash) {
+            Write-Host "The downloaded archive does not match the SHA-256 published in the release notes."
+            Write-Host "Nothing was installed. Download manually: $releasesUrl"
+            return 1
         }
+        Write-Host "  [Verify] SHA-256 matches the release notes"
 
         Expand-Archive -Path $zipPath -DestinationPath $extractDir -Force
 
