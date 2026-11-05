@@ -320,8 +320,16 @@ args = ["--login", "-i"]
 program = "powershell.exe"
 ```
 
-> [!NOTE]
-> The wrapper reads only the `program` key of the `[terminal.shell]` table (comment lines are ignored) to decide whether the startup tip/cheat sheet can be injected. A commented-out or unrelated `program = "..."` elsewhere in the file no longer wins. Custom shell paths with spaces are quoted when the welcome script is launched, and TOML backslash escapes in a double-quoted value (`"C:\\Users\\..."`) are decoded before use.
+| shell | startup tip/banner | `quake-help` / `quake-env` / `quake-update` |
+| --- | --- | --- |
+| PowerShell | yes (`welcome.ps1`) | yes |
+| Git Bash | yes (`QUAKE_SHOW_HELP`) | yes (written to `~/.bashrc`) |
+| WSL | yes, via `WSLENV` (`QUAKE_SHOW_HELP/u`) | **no** — launch-only; no file is written inside the distro |
+| CMD | no | no |
+
+**WSL is launch-only in this release.** No helper block is installed inside a distro and the once-a-day update notice does not appear in WSL; the startup tip crosses the Windows/Linux boundary because `QUAKE_SHOW_HELP` is exported through `WSLENV`.
+
+An installed WSL block carries `args = ["~"]`, so panes start in the Linux home. `StartingDirectory` sets a **Windows** working directory and cannot be a Linux cwd; WSL users who want another landing directory edit the `args` line in `[terminal.shell]`.
 
 ---
 

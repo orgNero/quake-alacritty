@@ -1847,6 +1847,27 @@ UnescapeTomlBasicString(value)
     return StrReplace(value, "\`"", "`"")
 }
 
+; Helper: Pure merge of QUAKE_SHOW_HELP/u into WSLENV, preserving an existing value.
+; If existing is empty, returns QUAKE_SHOW_HELP/u.
+; If QUAKE_SHOW_HELP or QUAKE_SHOW_HELP/ is already present, returns existing unchanged.
+; Otherwise appends :QUAKE_SHOW_HELP/u (omitting the extra colon if existing already ends with :).
+BuildWslEnv(existing)
+{
+    if (existing == "")
+        return "QUAKE_SHOW_HELP/u"
+
+    for part in StrSplit(existing, ":")
+    {
+        lowerPart := StrLower(part)
+        if (lowerPart == "quake_show_help" || InStr(lowerPart, "quake_show_help/") == 1)
+            return existing
+    }
+
+    if (SubStr(existing, -1) == ":")
+        return existing . "QUAKE_SHOW_HELP/u"
+    return existing . ":" . "QUAKE_SHOW_HELP/u"
+}
+
 ; Backward-compatible alias
 GetDefaultShell()
 {
@@ -2079,6 +2100,10 @@ LaunchTerminalProcess()
     ; For non-PowerShell shells (Git Bash, WSL), pass help mode via environment variable
     helpMode := shouldShowHelp ? ((g_ShowHelpOnStart == "first-run") ? "tip" : g_ShowHelpOnStart) : "none"
     EnvSet("QUAKE_SHOW_HELP", helpMode)
+
+    shellForEnv := GetConfiguredShellInfo().program
+    if (InStr(StrLower(shellForEnv), "wsl"))
+        EnvSet("WSLENV", BuildWslEnv(EnvGet("WSLENV")))
 
     if (!LaunchAlacritty("", startDir))
         return false
@@ -3228,6 +3253,7 @@ RunSelfTest()
     EmitSelfTest("monitors", MonitorGetCount())
     EmitSelfTest("windows", GetAlacrittyWindows().Length)
     EmitSelfTest("shell", GetConfiguredShellInfo().program)
+    EmitSelfTest("wslenvMerged", BuildWslEnv(EnvGet("WSLENV")))
     EmitSelfTest("bindings_total", 17)
     EmitSelfTest("bindingFailures", g_BindingFailures.Length)
     EmitSelfTest("configWarnings", g_ConfigWarnings.Length)
