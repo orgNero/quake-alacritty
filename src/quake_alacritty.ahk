@@ -22,6 +22,8 @@ global g_ShowHelpOnStart    := "tip"
 global g_FirstRun           := false
 global g_StartingDirectory  := "~"
 global g_AppVersion         := "unknown"
+global g_SelfTest           := false
+global g_SelfTestConfig     := ""
 
 ; Terminal executable resolution (never launch a bare "alacritty.exe")
 global g_AlacrittyExe            := ""   ; resolved executable (session cache)
@@ -165,17 +167,25 @@ LoadConfig()
     global g_KeyFocusLeft, g_KeyFocusRight, g_KeyFocusUp, g_KeyFocusDown
     global g_KeySwapLeft, g_KeySwapRight, g_KeySwapUp, g_KeySwapDown
     global g_KeyRotate, g_KeyMoveVisorLeft, g_KeyMoveVisorRight, g_KeyReload
+    global g_SelfTestConfig
 
     ; 1. Resolve path (%APPDATA%\alacritty\config.ini or local repository)
-    appDataPath := EnvGet("APPDATA") . "\alacritty\config.ini"
-    localPath   := A_ScriptDir . "\config.ini"
-
-    if FileExist(appDataPath)
-        g_ConfigFile := appDataPath
-    else if FileExist(localPath)
-        g_ConfigFile := localPath
+    if (g_SelfTestConfig != "")
+    {
+        g_ConfigFile := g_SelfTestConfig
+    }
     else
-        g_ConfigFile := appDataPath
+    {
+        appDataPath := EnvGet("APPDATA") . "\alacritty\config.ini"
+        localPath   := A_ScriptDir . "\config.ini"
+
+        if FileExist(appDataPath)
+            g_ConfigFile := appDataPath
+        else if FileExist(localPath)
+            g_ConfigFile := localPath
+        else
+            g_ConfigFile := appDataPath
+    }
 
     if (!FileExist(g_ConfigFile))
     {
@@ -183,6 +193,20 @@ LoadConfig()
         return
     }
     LogWrite("INFO", "config: reading " . g_ConfigFile)
+
+    ; Win32 GetPrivateProfileString (IniRead) does not support UNC paths (such
+    ; as \\wsl.localhost\...). Stage to a temp file on C: so IniRead succeeds,
+    ; then restore g_ConfigFile so diagnostics report the real location.
+    realConfigFile := g_ConfigFile
+    tempConfigFile := ""
+    if (SubStr(g_ConfigFile, 1, 2) == "\\")
+    {
+        tempConfigFile := A_Temp . "\quake_ini_" . DllCall("GetCurrentProcessId") . ".ini"
+        try {
+            FileCopy(g_ConfigFile, tempConfigFile, true)
+            g_ConfigFile := tempConfigFile
+        }
+    }
 
     ; 2. [General]
     try {
@@ -273,6 +297,11 @@ LoadConfig()
         g_KeyMoveVisorLeft  := NormalizeHotkey(IniRead(g_ConfigFile, "Hotkeys", "MoveVisorLeft", g_KeyMoveVisorLeft))
         g_KeyMoveVisorRight := NormalizeHotkey(IniRead(g_ConfigFile, "Hotkeys", "MoveVisorRight", g_KeyMoveVisorRight))
         g_KeyReload      := NormalizeHotkey(IniRead(g_ConfigFile, "Hotkeys", "ReloadScript", g_KeyReload))
+    }
+    if (tempConfigFile != "")
+    {
+        try FileDelete(tempConfigFile)
+        g_ConfigFile := realConfigFile
     }
 }
 
@@ -3137,6 +3166,80 @@ ReadAppVersion()
     }
 }
 
+; Parses CLI arguments for development/diagnostic self-test mode.
+ParseSelfTestArgs()
+{
+    global g_SelfTest, g_SelfTestConfig
+    expectConfig := false
+    for arg in A_Args
+    {
+        if (expectConfig)
+        {
+            if (SubStr(arg, 1, 10) == "--selftest")
+            {
+                FileAppend("selftest.error=missing value for --selftest-config`n", "*")
+                ExitApp(2)
+            }
+            g_SelfTestConfig := arg
+            expectConfig := false
+            continue
+        }
+        if (arg == "--selftest")
+        {
+            g_SelfTest := true
+        }
+        else if (arg == "--selftest-config")
+        {
+            expectConfig := true
+        }
+        else if (SubStr(arg, 1, 10) == "--selftest")
+        {
+            FileAppend("selftest.error=unknown flag: " . arg . "`n", "*")
+            ExitApp(2)
+        }
+    }
+    if (expectConfig)
+    {
+        FileAppend("selftest.error=missing value for --selftest-config`n", "*")
+        ExitApp(2)
+    }
+}
+
+; Helper: Emits a single key-value diagnostic line for the self-test runner.
+EmitSelfTest(key, value)
+{
+    cleanValue := StrReplace(StrReplace(String(value), "`r", ""), "`n", "")
+    FileAppend("selftest." . key . "=" . cleanValue . "`n", "*")
+}
+
+; Development/diagnostic self-test runner. Verifies configuration parsing,
+; hotkey bindings, shell resolution and window discovery without side effects.
+RunSelfTest()
+{
+    global g_AppVersion, g_ConfigFile, g_BindingFailures, g_ConfigWarnings, g_TileLayout, g_TwoPaneLayout
+
+    LoadConfig()
+    ReadAppVersion()
+    RegisterHotkeys()
+
+    EmitSelfTest("version", g_AppVersion)
+    EmitSelfTest("ahk", A_AhkVersion)
+    EmitSelfTest("config", g_ConfigFile)
+    EmitSelfTest("monitors", MonitorGetCount())
+    EmitSelfTest("windows", GetAlacrittyWindows().Length)
+    EmitSelfTest("shell", GetConfiguredShellInfo().program)
+    EmitSelfTest("bindings_total", 17)
+    EmitSelfTest("bindingFailures", g_BindingFailures.Length)
+    EmitSelfTest("configWarnings", g_ConfigWarnings.Length)
+    EmitSelfTest("tileLayout", g_TileLayout)
+    EmitSelfTest("twoPaneLayout", g_TwoPaneLayout)
+
+    ok := (g_BindingFailures.Length == 0 && g_ConfigWarnings.Length == 0) ? 1 : 0
+    EmitSelfTest("ok", ok)
+
+    ExitApp(ok == 1 ? 0 : 1)
+}
+
 ; Spawns the throttled background update check. Local file reads only: the
 ; PowerShell child owns the network call, so startup and the visor stay
 ; non-blocking. Advisory only - it never applies an update.
@@ -3204,6 +3307,10 @@ OnCloseMessage(wParam, lParam, msg, hwnd)
 ; -------------------------------------------------------------
 ; Script Initialization
 ; -------------------------------------------------------------
+ParseSelfTestArgs()
+if (g_SelfTest)
+    RunSelfTest()          ; never returns
+
 InitLog()
 LogWrite("INFO", "---- Quake Alacritty starting ----")
 LoadConfig()
