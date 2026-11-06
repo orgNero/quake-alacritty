@@ -357,6 +357,14 @@ The uninstaller:
 
 ---
 
+### Development & Tests
+
+The automated test and linting harness is documented in [tests/README.md](tests/README.md). Continuous integration runs static analysis (PSScriptAnalyzer), unit test suites (Pester 5), the AutoHotkey v2 self-test, workflow pin assertions, and an installer dry run on `windows-latest`. Test files and development scripts are repository-only and are not part of the release ZIP artifact.
+
+Official release ZIP archives carry build provenance attestations; see [SECURITY.md#build-provenance](SECURITY.md#build-provenance) for verification using `gh attestation verify`.
+
+---
+
 ## 🩺 Troubleshooting
 
 **`Install.cmd` closes immediately or does nothing**
