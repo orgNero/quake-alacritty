@@ -1,9 +1,13 @@
 [CmdletBinding()]
 param(
-    [string]$ConfigPath = (Join-Path $PSScriptRoot '..\src\config.ini')
+    [string]$ConfigPath
 )
 
 $ErrorActionPreference = 'Stop'
+
+if (-not $ConfigPath) {
+    $ConfigPath = Join-Path $PSScriptRoot '..\src\config.ini'
+}
 
 $ahk = if ($env:QUAKE_AHK -and (Test-Path -LiteralPath $env:QUAKE_AHK)) {
     $env:QUAKE_AHK

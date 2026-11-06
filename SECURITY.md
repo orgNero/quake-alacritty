@@ -40,4 +40,10 @@ This project is maintained on a best-effort basis without a guaranteed response-
 
 ## Build provenance
 
-TODO(C1): provenance paragraph
+The release workflow publishes a build provenance attestation for the ZIP. Verify it with:
+
+```bash
+gh attestation verify quake-alacritty-vX.Y.Z.zip --repo orgNero/quake-alacritty
+```
+
+It proves which workflow and commit built the artifact, not that the source is safe.
