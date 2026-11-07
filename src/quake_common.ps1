@@ -840,6 +840,49 @@ function Compare-QuakeVersion {
     }
 }
 
+function Get-QuakeArchiveDigestFromNotes {
+    [CmdletBinding()]
+    param(
+        [AllowEmptyString()]
+        [string]$Body
+    )
+
+    if ([string]::IsNullOrEmpty($Body)) {
+        return [pscustomobject]@{
+            State = 'missing'
+            Hash  = ''
+        }
+    }
+
+    $lines = $Body -split '\r?\n'
+    $hasDigestLine = $false
+
+    foreach ($line in $lines) {
+        if ($line -match '(?i)SHA-?256') {
+            $hasDigestLine = $true
+            $match = [regex]::Match($line, '(?i)\b[0-9a-f]{64}\b')
+            if ($match.Success) {
+                return [pscustomobject]@{
+                    State = 'ok'
+                    Hash  = $match.Value.ToLowerInvariant()
+                }
+            }
+        }
+    }
+
+    if ($hasDigestLine) {
+        return [pscustomobject]@{
+            State = 'malformed'
+            Hash  = ''
+        }
+    }
+
+    return [pscustomobject]@{
+        State = 'missing'
+        Hash  = ''
+    }
+}
+
 # Advisory-only update check shared by install.ps1 (-CheckForUpdates),
 # update-check.ps1 (background cache writer) and update.ps1 (-Check).
 # Reads the newest *published* GitHub release, so a tag without a release is

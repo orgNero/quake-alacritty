@@ -7,7 +7,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
-## [Unreleased]
+## [0.14.0] - 2026-11-06
 
 ## Features
 ### Major
@@ -26,6 +26,7 @@ _None_
 - **A failed `WinMove` is no longer invisible:** tiling now goes through `MovePane`, which separates "the pane is already gone" (a race with a closing window, logged as `INFO`) from an invalid rectangle or a failed move (logged as `ERROR`), instead of discarding the result of `try WinMove` at 25 call sites.
 - **Monitor migration is recorded:** when a monitor disappears, the log names the lost monitor ordinal and how many panes were migrated to the primary display.
 - **`config.ini` is no longer rewritten by `IniWrite`:** consuming `FirstRun` used to call `IniWrite`, which converts the UTF-8 file to the system ANSI code page and can mangle non-ASCII comments. First-run consumption is now tracked by `%APPDATA%\alacritty\.first-run-consumed`, and the installer clears that marker whenever it restores a fresh `config.ini`. `FirstRun` is also consumed by the first successful launch in **every** shell path, which is what the docs always claimed: previously a PowerShell launch with `ShowHelpOnStart=tip` or `banner` left it set. The INI reader's real limitation is documented instead: values must stay ASCII because Windows only understands UTF-16 INI files as Unicode.
+- **Unverified ZIP updates are refused:** `quake-update` fails closed when GitHub release notes carry no SHA-256 digest or a malformed token, refusing to extract unverified archives and printing the manual download link instead of proceeding with an unverified install; no bypass exists.
 
 ## Window Management & Multi-Monitor
 _None_
@@ -42,6 +43,11 @@ _None_
 - `src/config.ini`: documents the ASCII-value rule and the first-run marker.
 - `README.md`: documented the log, the two tray entries, the diagnostics report, binding-failure reporting, the ASCII limitation and the `[terminal.shell]`-only parser.
 - `InstallKeybdHook true, true` is kept deliberately (documented in the source): the `$`-prefixed and context-sensitive bindings rely on it.
+- **Automated test and linting harness**: added `tests/` with Pester 5 test suites (`QuakeCommon.Tests.ps1`, `Digest.Tests.ps1`), PSScriptAnalyzer static analysis rules (`PSScriptAnalyzerSettings.psd1`), and runner wrappers (`install-test-deps.ps1`, `run-lint.ps1`, `run-tests.ps1`, `run-selftest.ps1`, `run-workflow-checks.ps1`); tests are repository-only and not shipped in release archives (DEC-06).
+- **Diagnostics CLI surface**: added `--selftest` and `--selftest-config <path>` flags to `quake_alacritty.ahk` along with `tests/run-selftest.ps1` runner to non-interactively validate configuration parsing, 17 hotkey bindings, shell resolution, and monitor detection without UI or side effects (DEC-06, DEC-07).
+- **Continuous integration and provenance**: added `.github/workflows/ci.yml` running linting, Pester 5 suites, AutoHotkey v2 self-test, installer smoke dry-run, and workflow pin checks on Windows; pinned all GitHub Actions across workflows to immutable 40-character commit SHAs; added build provenance attestations (`actions/attest-build-provenance`) for release ZIPs verifiable via `gh attestation verify`.
+- **WSL launch-only parity**: clarified WSL as launch-only in v0.14.0 (no helper scripts or update notices installed inside Linux distributions); bridged `QUAKE_SHOW_HELP` into WSL sessions via `WSLENV` (`QUAKE_SHOW_HELP/u`) without duplicating or overwriting existing flags; documented that `StartingDirectory` is Windows-only and does not apply to WSL working directories (DEC-05).
+- **Security trust model and documentation parity**: added `SECURITY.md` documenting supported versions, trust model, installer touch points, install lifecycle, build provenance, and vulnerability reporting; updated `README.md` to reflect fail-closed update verification, WSL launch-only behavior, build provenance, and test suite documentation; added `Get-QuakeArchiveDigestFromNotes` pure parsing function to `src/quake_common.ps1`.
 
 ---
 

@@ -10,13 +10,15 @@ on:
 
 permissions:
   contents: write
+  id-token: write
+  attestations: write
 
 jobs:
   release:
     runs-on: windows-latest
     steps:
       - name: Check out
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           fetch-depth: 0
 
@@ -132,6 +134,11 @@ jobs:
             }
           }
           Write-Host "Built $zipName with $($rootFiles.Count + $sourceFiles.Count) files."
+
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4
+        with:
+          subject-path: quake-alacritty-v*.zip
 
       - name: Extract CHANGELOG release notes
         shell: powershell
